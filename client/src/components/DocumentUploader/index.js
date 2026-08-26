@@ -13,6 +13,7 @@ const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 export default function DocumentUploader({ onUpload, uploading }) {
   const [dragActive, setDragActive] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
   const inputRef = useRef(null);
 
   const handleDrag = (e) => {
@@ -41,7 +42,6 @@ export default function DocumentUploader({ onUpload, uploading }) {
     if (e.target.files && e.target.files.length > 0) {
       handleFile(e.target.files[0]);
     }
-    // Reset so picking the same file again still fires onChange
     e.target.value = '';
   };
 
@@ -49,81 +49,134 @@ export default function DocumentUploader({ onUpload, uploading }) {
     setLocalError('');
 
     if (file.type !== 'application/pdf') {
-      setLocalError('Only PDF files are allowed');
+      setLocalError('Only PDF files are allowed.');
       return;
     }
 
     if (file.size > MAX_SIZE_BYTES) {
-      setLocalError('File size must be less than 10MB');
+      setLocalError('File size must be less than 10 MB.');
       return;
     }
 
+    setSelectedFile(file);
     onUpload(file);
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   return (
     <div>
       {localError && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-sm text-red-700">{localError}</p>
+        <div className="cm-banner-error mb-4">
+          <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
+          </svg>
+          <span>{localError}</span>
         </div>
       )}
 
       <div
-        className={`p-8 border-2 border-dashed rounded-lg transition ${
-          dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50'
-        }`}
+        id="pdf-drop-zone"
+        className={`relative overflow-hidden rounded-2xl border-2 border-dashed px-8 py-12 text-center transition-all duration-200 cursor-pointer ${
+          dragActive
+            ? 'border-violet-500/60 bg-violet-500/10'
+            : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+        } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
+        onClick={() => !uploading && inputRef.current?.click()}
       >
-        <div className="text-center">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            stroke="currentColor"
-            fill="none"
-            viewBox="0 0 48 48"
-            aria-hidden="true"
-          >
-            <path
-              d="M28 8H12a4 4 0 00-4 4v20a4 4 0 004 4h24a4 4 0 004-4V20"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M16 24l8-8 8 8M24 16v16"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Upload a PDF</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Drag and drop or use the button below
-          </p>
+        {/* Background glow when dragging */}
+        {dragActive && (
+          <div className="pointer-events-none absolute inset-0 rounded-2xl"
+               style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(139,92,246,0.12) 0%, transparent 70%)' }} />
+        )}
 
-          <button
-            type="button"
-            disabled={uploading}
-            onClick={() => inputRef.current?.click()}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {uploading ? 'Uploading...' : 'Select PDF'}
-          </button>
+        {uploading ? (
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative h-14 w-14">
+              <svg className="h-14 w-14 animate-spin text-violet-500" viewBox="0 0 56 56" fill="none">
+                <circle cx="28" cy="28" r="24" stroke="currentColor" strokeOpacity="0.15" strokeWidth="5"/>
+                <path d="M52 28A24 24 0 0128 4" stroke="url(#spin-grad)" strokeWidth="5" strokeLinecap="round"/>
+                <defs>
+                  <linearGradient id="spin-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="rgb(139,92,246)"/>
+                    <stop offset="100%" stopColor="rgb(236,72,153)"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <svg className="h-6 w-6 text-violet-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd"/>
+                </svg>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Processing document…</p>
+              {selectedFile && (
+                <p className="mt-1 text-xs text-slate-500">{selectedFile.name} · {formatSize(selectedFile.size)}</p>
+              )}
+              <p className="mt-1 text-xs text-slate-600">Chunking and embedding — this may take a moment</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <div
+              className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-all duration-200 ${
+                dragActive ? 'scale-110' : ''
+              }`}
+              style={{
+                background: dragActive
+                  ? 'linear-gradient(135deg, rgba(139,92,246,0.4), rgba(236,72,153,0.3))'
+                  : 'rgba(139,92,246,0.15)',
+                border: '1px solid rgba(139,92,246,0.3)',
+              }}
+            >
+              <svg className={`h-7 w-7 transition-colors ${dragActive ? 'text-violet-300' : 'text-violet-500'}`}
+                   viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+              </svg>
+            </div>
 
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,application/pdf"
-            onChange={handleFileInput}
-            disabled={uploading}
-            className="hidden"
-          />
+            <div>
+              <p className="text-sm font-semibold text-white">
+                {dragActive ? 'Drop to upload' : 'Drag & drop a PDF'}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">or click to browse your files</p>
+            </div>
 
-          <p className="mt-2 text-xs text-gray-500">PDF up to 10MB</p>
-        </div>
+            <div
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200"
+              style={{
+                background: 'linear-gradient(135deg, rgb(139,92,246), rgb(124,58,237))',
+                boxShadow: '0 4px 20px rgba(139,92,246,0.3)',
+              }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd"/>
+              </svg>
+              Select PDF
+            </div>
+
+            <p className="text-xs text-slate-600">PDF files up to 10 MB</p>
+          </div>
+        )}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          onChange={handleFileInput}
+          disabled={uploading}
+          className="hidden"
+          aria-label="Upload PDF file"
+        />
       </div>
     </div>
   );

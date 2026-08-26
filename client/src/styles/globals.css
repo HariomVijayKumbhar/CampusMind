@@ -1,3 +1,200 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: 139 92 246;
+    --color-primary-dark: 124 58 237;
+    --color-accent: 236 72 153;
+    --color-surface: 15 15 23;
+    --color-surface-2: 22 22 34;
+    --color-surface-3: 30 30 46;
+    --color-border: 255 255 255 / 0.08;
+    --color-text: 248 248 255;
+    --color-text-muted: 148 163 184;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: rgb(var(--color-surface));
+    color: rgb(var(--color-text));
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.4);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.7);
+  }
+}
+
+@layer components {
+  /* ─── Auth Card ─────────────────────────────────────────────── */
+  .auth-card {
+    @apply relative rounded-2xl border border-white/10 bg-[#0F0F17] p-8 shadow-2xl backdrop-blur-xl;
+    background: linear-gradient(135deg, rgba(22,22,34,0.95) 0%, rgba(15,15,23,0.98) 100%);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 32px 64px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  /* ─── Input ─────────────────────────────────────────────────── */
+  .cm-input {
+    @apply w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500
+           outline-none transition-all duration-200
+           focus:border-violet-500/60 focus:bg-white/10 focus:ring-2 focus:ring-violet-500/20;
+  }
+  .cm-input:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .cm-label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400;
+  }
+
+  /* ─── Primary Button ─────────────────────────────────────────── */
+  .cm-btn-primary {
+    @apply relative flex w-full items-center justify-center gap-2 overflow-hidden
+           rounded-xl px-6 py-3.5 text-sm font-semibold text-white
+           transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60;
+    background: linear-gradient(135deg, rgb(139 92 246), rgb(124 58 237));
+    box-shadow: 0 4px 24px rgba(139, 92, 246, 0.35);
+  }
+  .cm-btn-primary:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 32px rgba(139, 92, 246, 0.5);
+  }
+  .cm-btn-primary:not(:disabled):active {
+    transform: translateY(0);
+  }
+
+  /* ─── Ghost Button ───────────────────────────────────────────── */
+  .cm-btn-ghost {
+    @apply rounded-lg px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-white/10 hover:text-white;
+  }
+
+  /* ─── Danger Button ──────────────────────────────────────────── */
+  .cm-btn-danger {
+    @apply rounded-lg px-3 py-1.5 text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50;
+  }
+
+  /* ─── Glass surface ──────────────────────────────────────────── */
+  .cm-surface {
+    background: rgba(22, 22, 34, 0.7);
+    border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(16px);
+  }
+
+  /* ─── Gradient text ──────────────────────────────────────────── */
+  .gradient-text {
+    background: linear-gradient(135deg, #a78bfa 0%, #f472b6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ─── Error / Success banners ─────────────────────────────────── */
+  .cm-banner-error {
+    @apply flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300;
+  }
+  .cm-banner-success {
+    @apply flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300;
+  }
+
+  /* ─── Status badge ───────────────────────────────────────────── */
+  .badge-ready {
+    @apply inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400;
+  }
+  .badge-processing {
+    @apply inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-400;
+  }
+  .badge-failed {
+    @apply inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-medium text-red-400;
+  }
+
+  /* ─── Chat message bubbles ────────────────────────────────────── */
+  .bubble-user {
+    background: linear-gradient(135deg, rgb(139 92 246), rgb(109 40 217));
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.25);
+  }
+  .bubble-assistant {
+    background: rgba(30, 30, 46, 0.9);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+}
+
+@layer utilities {
+  .text-muted { @apply text-slate-400; }
+  .bg-glow {
+    background: radial-gradient(ellipse 80% 40% at 50% -10%, rgba(139,92,246,0.15) 0%, transparent 70%);
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out forwards;
+  }
+  .animate-pulse-dot {
+    animation: pulseDot 1.4s ease-in-out infinite;
+  }
+}
+
+/* ─── Keyframes ────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(0.7); opacity: 0.4; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+/* ─── Animated gradient border ─────────────────────────────────── */
+.glow-border {
+  position: relative;
+}
+.glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(139,92,246,0.5), rgba(236,72,153,0.3), rgba(139,92,246,0.5));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ─── Drag-over state ──────────────────────────────────────────── */
+.drag-active {
+  border-color: rgba(139, 92, 246, 0.6) !important;
+  background: rgba(139, 92, 246, 0.08) !important;
+}

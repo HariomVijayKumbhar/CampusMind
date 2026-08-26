@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Head from 'next/head';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/services/api';
 
-/**
- * Profile page: shows name, email, and role; includes logout.
- * Role comes from the backend profiles table (source of truth).
- */
 export default function Settings() {
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -15,7 +12,6 @@ export default function Settings() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        // Backend returns { id, full_name, role, created_at }
         const response = await api.get('/api/auth/profile');
         setProfile(response.data);
       } catch (err) {
@@ -28,49 +24,94 @@ export default function Settings() {
     fetchProfile();
   }, []);
 
+  const initials = profile?.full_name
+    ? profile.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
+
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        <div className="mx-auto max-w-2xl px-4 py-12">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="mb-6 flex items-center justify-between">
-              <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-              <Link href="/chat" className="text-sm text-blue-600 hover:text-blue-500">
-                Back to Chat
-              </Link>
-            </div>
+      <Head>
+        <title>Account Settings — CampusMind</title>
+        <meta name="description" content="View your CampusMind profile details and account settings." />
+      </Head>
 
+      <div className="min-h-screen px-4 py-8 sm:px-6 sm:py-12" style={{ background: 'rgb(15,15,23)' }}>
+        <div className="mx-auto max-w-xl space-y-6">
+          {/* Top Bar */}
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold tracking-tight text-white">Settings</h1>
+            <Link
+              href="/chat"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition-all hover:border-violet-500/40 hover:bg-white/10 hover:text-white"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd"/>
+              </svg>
+              Back to Chat
+            </Link>
+          </div>
+
+          {/* Profile Card */}
+          <div
+            className="overflow-hidden rounded-2xl border border-white/10 p-6 sm:p-8"
+            style={{ background: 'rgba(22,22,34,0.75)', backdropFilter: 'blur(16px)' }}
+          >
             {loadingProfile ? (
-              <p className="py-8 text-center text-sm text-gray-500">
-                Loading profile...
-              </p>
+              <div className="flex justify-center items-center py-12 gap-3">
+                <svg className="h-5 w-5 animate-spin text-violet-400" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                <span className="text-sm text-slate-400">Loading profile...</span>
+              </div>
             ) : (
               <div className="space-y-6">
-                <div>
-                  <h2 className="mb-4 text-lg font-medium text-gray-900">Profile</h2>
-                  <dl className="space-y-4">
-                    <div>
-                      <dt className="text-sm font-medium text-gray-700">Name</dt>
-                      <dd className="mt-1 text-gray-900">
-                        {profile?.full_name || 'N/A'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-700">Email</dt>
-                      <dd className="mt-1 text-gray-900">{profile?.email || 'N/A'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-700">Role</dt>
-                      <dd className="mt-1">
-                        <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium capitalize text-gray-800">
-                          {profile?.role || 'student'}
-                        </span>
-                      </dd>
-                    </div>
-                  </dl>
+                {/* Header with avatar */}
+                <div className="flex items-center gap-4 border-b border-white/10 pb-6">
+                  <div
+                    className="flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-bold text-white shadow-xl"
+                    style={{ background: 'linear-gradient(135deg, rgb(139,92,246), rgb(236,72,153))' }}
+                  >
+                    {initials}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">{profile?.full_name || 'User'}</h2>
+                    <p className="text-sm text-slate-400">{profile?.email || ''}</p>
+                  </div>
                 </div>
 
-                <div className="border-t border-gray-200 pt-6">
+                {/* Details */}
+                <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Full Name</dt>
+                    <dd className="mt-1 text-sm font-medium text-white">{profile?.full_name || 'N/A'}</dd>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Email Address</dt>
+                    <dd className="mt-1 text-sm font-medium text-white">{profile?.email || 'N/A'}</dd>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Role</dt>
+                    <dd className="mt-1">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/15 border border-violet-500/25 px-3 py-0.5 text-xs font-semibold capitalize text-violet-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                        {profile?.role || 'student'}
+                      </span>
+                    </dd>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Member Since</dt>
+                    <dd className="mt-1 text-sm font-medium text-white">
+                      {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : 'N/A'}
+                    </dd>
+                  </div>
+                </dl>
+
+                {/* Sign Out Button */}
+                <div className="border-t border-white/10 pt-6">
                   <SignOutButton />
                 </div>
               </div>
@@ -98,12 +139,29 @@ function SignOutButton() {
 
   return (
     <button
+      id="settings-signout"
       type="button"
       onClick={handleLogout}
       disabled={signingOut}
-      className="w-full rounded-md bg-red-600 py-2 px-4 font-medium text-white hover:bg-red-700 disabled:opacity-50"
+      className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300 transition-all hover:bg-red-500/20 hover:text-red-200 disabled:opacity-50"
     >
-      {signingOut ? 'Signing out...' : 'Sign Out'}
+      {signingOut ? (
+        <>
+          <svg className="h-4 w-4 animate-spin text-red-400" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+          Signing out...
+        </>
+      ) : (
+        <>
+          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 4.25A2.25 2.25 0 015.25 2h5.5A2.25 2.25 0 0113 4.25v2a.75.75 0 01-1.5 0v-2a.75.75 0 00-.75-.75h-5.5a.75.75 0 00-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 00.75-.75v-2a.75.75 0 011.5 0v2A2.25 2.25 0 0110.75 18h-5.5A2.25 2.25 0 013 15.75V4.25z" clipRule="evenodd"/>
+            <path fillRule="evenodd" d="M19 10a.75.75 0 00-.75-.75H8.704l1.048-1.07a.75.75 0 10-1.004-1.115l-2.5 2.5a.75.75 0 000 1.07l2.5 2.5a.75.75 0 101.004-1.114L8.704 10.75H18.25A.75.75 0 0019 10z" clipRule="evenodd"/>
+          </svg>
+          Sign Out
+        </>
+      )}
     </button>
   );
 }

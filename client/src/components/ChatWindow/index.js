@@ -4,17 +4,70 @@ import { useChatStore } from '@/store/chatStore';
 
 function TypingIndicator() {
   return (
-    <div className="flex w-full justify-start">
-      <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex items-center gap-1">
+    <div className="flex w-full justify-start animate-slide-up">
+      <div className="flex items-center gap-2 rounded-2xl px-4 py-3 bubble-assistant">
+        {/* Robot icon */}
+        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+             style={{ background: 'linear-gradient(135deg, rgb(139,92,246), rgb(236,72,153))' }}>
+          <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h3a3 3 0 013 3v9a3 3 0 01-3 3H8a3 3 0 01-3-3v-9a3 3 0 013-3h3V5.73A2 2 0 0112 2zm-3 9a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zm-3 4a3 3 0 01-2.83-2H9a3 3 0 005.66 0h-.83A3 3 0 0112 15z"/>
+          </svg>
+        </div>
+        <div className="flex items-center gap-1.5">
           {[0, 150, 300].map((delay) => (
             <span
               key={delay}
-              className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-              style={{ animationDelay: `${delay}ms` }}
+              className="h-2 w-2 rounded-full bg-violet-400"
+              style={{ animation: `bounceDot 1.2s ease-in-out ${delay}ms infinite` }}
             />
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  const suggestions = [
+    'What are the admission requirements?',
+    'Tell me about the hostel facilities.',
+    'What courses are available in CS?',
+    'What are the exam schedules?',
+  ];
+  const sendMessage = useChatStore((state) => state.sendMessage);
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center animate-fade-in">
+      <div
+        className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl"
+        style={{
+          background: 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(236,72,153,0.1))',
+          boxShadow: '0 0 40px rgba(139,92,246,0.2)',
+          border: '1px solid rgba(139,92,246,0.25)',
+        }}
+      >
+        <svg className="h-10 w-10 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/>
+        </svg>
+      </div>
+
+      <h2 className="mb-2 text-2xl font-bold text-white">Ask CampusMind</h2>
+      <p className="mb-8 max-w-sm text-sm leading-relaxed text-slate-400">
+        Get instant answers about admissions, courses, fees, exams, hostels, and more — powered by your college&apos;s official documents.
+      </p>
+
+      <div className="grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
+        {suggestions.map((s) => (
+          <button
+            key={s}
+            onClick={() => sendMessage(s)}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-slate-300
+                       transition-all duration-200 hover:border-violet-500/40 hover:bg-white/10 hover:text-white"
+          >
+            {s}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -34,20 +87,15 @@ export default function ChatWindow() {
 
   const [input, setInput] = useState('');
   const bottomRef = useRef(null);
-  const topRef = useRef(null);
   const containerRef = useRef(null);
+  const textareaRef = useRef(null);
   const previousScrollHeight = useRef(0);
 
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    const scrollTop = container.scrollTop;
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-
-    if (scrollTop < 100 && hasMoreHistory && !loadingOlder) {
-      previousScrollHeight.current = scrollHeight;
+    if (container.scrollTop < 100 && hasMoreHistory && !loadingOlder) {
+      previousScrollHeight.current = container.scrollHeight;
       loadOlderMessages();
     }
   }, [hasMoreHistory, loadingOlder, loadOlderMessages]);
@@ -64,9 +112,7 @@ export default function ChatWindow() {
     if (loadingOlder && previousScrollHeight.current > 0) {
       const container = containerRef.current;
       if (container) {
-        const newScrollHeight = container.scrollHeight;
-        const heightDiff = newScrollHeight - previousScrollHeight.current;
-        container.scrollTop = heightDiff;
+        container.scrollTop = container.scrollHeight - previousScrollHeight.current;
       }
       previousScrollHeight.current = 0;
     }
@@ -77,6 +123,14 @@ export default function ChatWindow() {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, sending, loadingOlder]);
+
+  // Auto-grow textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+    }
+  }, [input]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -94,53 +148,64 @@ export default function ChatWindow() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-gray-50">
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-y-auto"
-      >
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6">
-          {loadingHistory ? (
-            <p className="mt-10 text-center text-sm text-gray-500">
-              Loading your conversation...
-            </p>
-          ) : messages.length === 0 && !sending ? (
-            <div className="mt-16 text-center">
-              <h1 className="text-xl font-bold text-gray-900">
-                Ask me anything about the college
-              </h1>
-              <p className="mt-2 text-sm text-gray-500">
-                Admissions, courses, fees, exams, hostels, library — answers
-                come from the uploaded college documents.
-              </p>
+    <div
+      className="flex h-full min-h-0 flex-col"
+      style={{ background: 'rgb(15,15,23)' }}
+    >
+      {/* Message list */}
+      <div ref={containerRef} className="flex-1 overflow-y-auto">
+        {loadingHistory ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <svg className="h-6 w-6 animate-spin text-violet-400" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              <p className="text-sm text-slate-500">Loading conversation...</p>
             </div>
-          ) : (
-            <>
-              {hasMoreHistory && (
-                <div ref={topRef} className="flex justify-center py-2">
-                  {loadingOlder && (
-                    <p className="text-sm text-gray-500">Loading older messages...</p>
-                  )}
-                </div>
-              )}
-              {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
-              ))}
-              {sending && <TypingIndicator />}
-            </>
-          )}
-          <div ref={bottomRef} />
-        </div>
+          </div>
+        ) : messages.length === 0 && !sending ? (
+          <EmptyState />
+        ) : (
+          <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
+            {hasMoreHistory && (
+              <div className="flex justify-center py-2">
+                {loadingOlder && (
+                  <span className="text-xs text-slate-500 flex items-center gap-1.5">
+                    <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Loading older messages...
+                  </span>
+                )}
+              </div>
+            )}
+
+            {messages.map((message, idx) => (
+              <MessageBubble key={message.id} message={message} index={idx} />
+            ))}
+
+            {sending && <TypingIndicator />}
+            <div ref={bottomRef} />
+          </div>
+        )}
       </div>
 
+      {/* Error banner */}
       {error && (
         <div className="mx-auto mb-2 w-full max-w-3xl px-4">
-          <div className="flex items-center justify-between rounded-md bg-red-50 border border-red-200 px-4 py-2">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="cm-banner-error justify-between">
+            <span className="flex items-center gap-2">
+              <svg className="h-4 w-4 shrink-0 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
+              </svg>
+              {error}
+            </span>
             <button
               type="button"
               onClick={clearError}
-              className="ml-4 text-xs font-medium text-red-600 hover:text-red-800"
+              className="shrink-0 text-xs font-medium text-red-400 hover:text-red-200 transition-colors"
             >
               Dismiss
             </button>
@@ -148,26 +213,59 @@ export default function ChatWindow() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-end gap-2 px-4 py-3">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your question..."
-            rows={1}
-            disabled={sending}
-            className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
-          />
+      {/* Input bar */}
+      <div
+        className="border-t border-white/10 px-4 py-4"
+        style={{ background: 'rgba(22,22,34,0.9)', backdropFilter: 'blur(16px)' }}
+      >
+        <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl items-end gap-3">
+          <div className="relative flex-1">
+            <textarea
+              ref={textareaRef}
+              id="chat-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask anything about your college..."
+              rows={1}
+              disabled={sending}
+              className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-4 text-sm text-white placeholder-slate-500
+                         outline-none transition-all duration-200
+                         focus:border-violet-500/50 focus:bg-white/10 focus:ring-2 focus:ring-violet-500/20
+                         disabled:opacity-50"
+              style={{ minHeight: '48px', maxHeight: '160px' }}
+            />
+          </div>
+
           <button
+            id="chat-send"
             type="submit"
             disabled={sending || !input.trim()}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-all duration-200
+                       disabled:cursor-not-allowed disabled:opacity-40"
+            style={{
+              background: 'linear-gradient(135deg, rgb(139,92,246), rgb(124,58,237))',
+              boxShadow: input.trim() && !sending ? '0 4px 20px rgba(139,92,246,0.4)' : 'none',
+            }}
+            aria-label="Send message"
           >
-            {sending ? 'Sending...' : 'Send'}
+            {sending ? (
+              <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            ) : (
+              <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
+              </svg>
+            )}
           </button>
-        </div>
-      </form>
+        </form>
+
+        <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-slate-600">
+          Shift+Enter for new line · answers grounded in college documents
+        </p>
+      </div>
     </div>
   );
 }
