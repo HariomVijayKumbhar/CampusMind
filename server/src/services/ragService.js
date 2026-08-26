@@ -1,5 +1,5 @@
-// RAG Service - similarity search, prompt assembly, LLM calls, fallback logic
-// Updated with conversational memory and RecursiveCharacterTextSplitter usage
+// RAG Service - similarity search, prompt assembly, LLM calls (OpenRouter / Groq), fallback logic
+// Supports OpenRouter and Groq as AI providers
 
 const supabase = require('../config/supabaseClient');
 const embeddingService = require('./embeddingService');
@@ -7,9 +7,14 @@ const ragConfig = require('../config/rag');
 const { Groq } = require('groq-sdk');
 const RecursiveCharacterTextSplitter = require('../utils/textSplitter');
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+let groqInstance = null;
+if (ragConfig.groqApiKey) {
+  try {
+    groqInstance = new Groq({ apiKey: ragConfig.groqApiKey });
+  } catch (err) {
+    console.warn('[RAG] Groq initialization skipped or failed:', err.message);
+  }
+}
 
 const textSplitter = new RecursiveCharacterTextSplitter();
 
@@ -30,7 +35,7 @@ async function retrieveContext(questionText) {
       throw new Error(`Similarity search failed: ${error.message}`);
     }
 
-    const relevantChunks = chunks.filter(
+    const relevantChunks = (chunks || []).filter(
       (chunk) => chunk.similarity >= ragConfig.similarityThreshold
     );
 
@@ -43,21 +48,21 @@ async function retrieveContext(questionText) {
 
 function assemblePrompt(question, chunks, conversationHistory = []) {
   const contextText = chunks
-    .map((chunk, i) => `[Chunk ${i + 1}]\n${chunk.content}`)
+    .map((chunk, i) => `[Chunk ${i + 1} - ${chunk.document_title || 'Document'}]\n${chunk.content}`)
     .join('\n\n');
 
-  const systemPrompt = `You are a helpful college information assistant. Answer questions based ONLY on the provided document chunks and conversation history. If the answer is not in the documents or previous context, say "I don't have that information in the knowledge base."
+  const systemPrompt = `You are CampusMind, a helpful and knowledgeable college assistant. Answer the user's question accurately using ONLY the provided document chunks and conversation history.
 
-Keep answers concise and directly answer the question. Do not make up information.`;
+Guidelines:
+- If the answer is found in the context, provide a clear, concise, and structured answer.
+- If the answer is NOT in the provided documents or context, say "I don't have that information in the college knowledge base."
+- Do not invent facts, dates, or details.`;
 
   const historyText = conversationHistory
     .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
     .join('\n');
 
-  const userPrompt = `Previous conversation:
-${historyText}
-
-Documents:
+  const userPrompt = `${historyText ? `Previous conversation:\n${historyText}\n\n` : ''}Knowledge Base Context:
 ${contextText}
 
 Question: ${question}
@@ -67,10 +72,49 @@ Answer:`;
   return { systemPrompt, userPrompt };
 }
 
+async function callOpenRouter(systemPrompt, userPrompt) {
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${ragConfig.openrouterApiKey}`,
+        'HTTP-Referer': 'https://campusmind.local',
+        'X-Title': 'CampusMind',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: ragConfig.openrouterModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: ragConfig.llmTemperature,
+        max_tokens: ragConfig.llmMaxTokens,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+    const answerText = data.choices?.[0]?.message?.content?.trim() || '';
+    return answerText;
+  } catch (error) {
+    console.error('OpenRouter error:', error);
+    throw new Error(`OpenRouter error: ${error.message}`);
+  }
+}
+
 async function callGroq(systemPrompt, userPrompt) {
   try {
-    const chatCompletion = await groq.chat.completions.create({
-      model: ragConfig.llmModel,
+    if (!groqInstance) {
+      throw new Error('Groq client is not configured.');
+    }
+
+    const chatCompletion = await groqInstance.chat.completions.create({
+      model: ragConfig.groqModel,
       max_tokens: ragConfig.llmMaxTokens,
       temperature: ragConfig.llmTemperature,
       messages: [
@@ -85,8 +129,22 @@ async function callGroq(systemPrompt, userPrompt) {
     return answerText;
   } catch (error) {
     console.error('Groq error:', error);
-    throw new Error(`LLM error: ${error.message}`);
+    throw new Error(`Groq error: ${error.message}`);
   }
+}
+
+async function callLLM(systemPrompt, userPrompt) {
+  if (ragConfig.aiProvider === 'openrouter' && ragConfig.openrouterApiKey) {
+    console.log(`[RAG] Calling OpenRouter model: ${ragConfig.openrouterModel}`);
+    return await callOpenRouter(systemPrompt, userPrompt);
+  }
+
+  if (ragConfig.groqApiKey) {
+    console.log(`[RAG] Calling Groq model: ${ragConfig.groqModel}`);
+    return await callGroq(systemPrompt, userPrompt);
+  }
+
+  throw new Error('No valid AI provider configured. Please check your OPENROUTER_API_KEY or GROQ_API_KEY.');
 }
 
 function extractSources(chunks) {
@@ -114,7 +172,7 @@ async function generateAnswer(question, userId, conversationHistory = []) {
 
       return {
         answer:
-          "I couldn't find relevant information in the uploaded documents for your question. Please try rephrasing your question or upload documents related to what you're asking about.",
+          "I couldn't find relevant information in the uploaded college documents for your question. Please try rephrasing your question or upload relevant documents to the knowledge base.",
         sources: [],
         usedFallback: true,
       };
@@ -122,9 +180,7 @@ async function generateAnswer(question, userId, conversationHistory = []) {
 
     const { systemPrompt, userPrompt } = assemblePrompt(question, relevantChunks, conversationHistory);
 
-    console.log('[RAG] Calling Groq LLM...');
-
-    const answer = await callGroq(systemPrompt, userPrompt);
+    const answer = await callLLM(systemPrompt, userPrompt);
 
     const sources = extractSources(relevantChunks);
 
@@ -145,7 +201,9 @@ module.exports = {
   generateAnswer,
   retrieveContext,
   assemblePrompt,
+  callOpenRouter,
   callGroq,
+  callLLM,
   extractSources,
   chunkText,
 };
