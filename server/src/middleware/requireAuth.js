@@ -1,4 +1,3 @@
-const validator = require('validator');
 const supabase = require('../config/supabaseClient');
 
 /**
@@ -12,16 +11,16 @@ async function requireAuth(req, res, next) {
       return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
     }
 
-    const token = authHeader.substring(7);
+    const token = authHeader.substring(7).trim();
 
-    if (!token || token.length < 10 || validator.isNull(token)) {
+    if (!token || token.length < 10) {
       return res.status(401).json({ error: 'Unauthorized: Invalid token format' });
     }
 
     const { data, error } = await supabase.auth.getUser(token);
 
-    if (error || !data.user) {
-      return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    if (error || !data?.user) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
     }
 
     req.user = data.user;

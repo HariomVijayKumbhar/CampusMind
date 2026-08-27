@@ -9,6 +9,7 @@ router.post(
   '/',
   requireAuth,
   body('message').isString().trim().notEmpty().withMessage('Message is required'),
+  body('collection_id').optional({ nullable: true }).isUUID().withMessage('collection_id must be a valid UUID'),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

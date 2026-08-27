@@ -3,26 +3,22 @@ import Link from 'next/link';
 import Head from 'next/head';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import ChatWindow from '@/components/ChatWindow';
-import api from '@/services/api';
 import { useAuthStore } from '@/store/authStore';
+import { useChatStore } from '@/store/chatStore';
 
 export default function Chat() {
-  const [profile, setProfile] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const profile = useAuthStore((state) => state.profile);
+  const fetchProfile = useAuthStore((state) => state.fetchProfile);
   const logout = useAuthStore((state) => state.logout);
+  const messages = useChatStore((state) => state.messages);
 
+  // Profile is loaded centrally in authStore.initializeAuth. This just
+  // guarantees it's available (cached, no extra request if already loaded).
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const response = await api.get('/api/auth/profile');
-        setProfile(response.data);
-      } catch (err) {
-        console.error('Failed to fetch profile:', err);
-      }
-    };
     fetchProfile();
-  }, []);
+  }, [fetchProfile]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -34,6 +30,36 @@ export default function Chat() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const handleExportChat = () => {
+    if (!messages || messages.length === 0) {
+      alert('No messages to export yet.');
+      return;
+    }
+
+    let markdown = `# CampusMind Conversation Export\nGenerated on: ${new Date().toLocaleString()}\n\n---\n\n`;
+    messages.forEach((msg) => {
+      const sender = msg.role === 'user' ? '🧑 Student' : '🤖 CampusMind Assistant';
+      markdown += `### ${sender}\n${msg.content}\n\n`;
+      if (msg.sources && msg.sources.length > 0) {
+        markdown += `**Sources:**\n`;
+        msg.sources.forEach((s) => {
+          markdown += `- *${s.document_title || 'Document'}*: "${s.excerpt || ''}"\n`;
+        });
+        markdown += `\n`;
+      }
+      markdown += `---\n\n`;
+    });
+
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `campusmind-chat-${Date.now()}.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -75,17 +101,31 @@ export default function Chat() {
 
           {/* Right nav */}
           <div className="flex items-center gap-2">
-            {profile?.role === 'admin' && (
-              <Link
-                href="/admin/documents"
-                className="hidden sm:flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5
+            {/* Upload & Knowledge Base button */}
+            <Link
+              href="/admin/documents"
+              className="flex items-center gap-1.5 rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-1.5
+                         text-xs font-semibold text-violet-300 transition-all hover:bg-violet-500/20 hover:text-white"
+            >
+              <svg className="h-4 w-4 text-violet-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd"/>
+              </svg>
+              <span>Upload Docs &amp; OCR</span>
+            </Link>
+
+            {/* Export conversation button */}
+            {messages.length > 0 && (
+              <button
+                onClick={handleExportChat}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5
                            text-xs font-medium text-slate-300 transition-all hover:border-violet-500/40 hover:bg-white/10 hover:text-white"
+                title="Export conversation as Markdown"
               >
                 <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/>
+                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"/>
                 </svg>
-                Manage Docs
-              </Link>
+                Export Chat
+              </button>
             )}
 
             {/* User avatar menu */}
@@ -113,6 +153,22 @@ export default function Chat() {
                     </div>
                   )}
                   <div className="border-t border-white/10 pt-1">
+                    <Link href="/admin/documents" onClick={() => setMenuOpen(false)}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors">
+                      <svg className="h-4 w-4 text-violet-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/>
+                      </svg>
+                      Manage Documents
+                    </Link>
+                    <button
+                      onClick={() => { setMenuOpen(false); handleExportChat(); }}
+                      className="flex sm:hidden w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"/>
+                      </svg>
+                      Export Chat
+                    </button>
                     <Link href="/settings" onClick={() => setMenuOpen(false)}
                           className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors">
                       <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -120,15 +176,6 @@ export default function Chat() {
                       </svg>
                       Settings
                     </Link>
-                    {profile?.role === 'admin' && (
-                      <Link href="/admin/documents" onClick={() => setMenuOpen(false)}
-                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors">
-                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd"/>
-                        </svg>
-                        Manage Documents
-                      </Link>
-                    )}
                     <button
                       onClick={() => { setMenuOpen(false); logout(); }}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"

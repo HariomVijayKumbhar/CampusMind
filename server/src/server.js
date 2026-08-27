@@ -9,32 +9,47 @@ const rateLimiter = require('./middleware/rateLimiter');
 const chatRoutes = require('./routes/chatRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const authRoutes = require('./routes/authRoutes');
+const collectionRoutes = require('./routes/collectionRoutes');
 
 const app = express();
 
 // Security middleware
 app.use(helmet());
 
-// CORS configuration - exact origin contract
+// CORS configuration
+const configuredOrigins = (env.frontendUrl || 'http://localhost:3000')
+  .split(',')
+  .map((url) => url.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
 const allowedOrigins = [
   'http://localhost:3000',
-  env.frontendUrl,
-].filter(Boolean);
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  ...configuredOrigins,
+];
 
 app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      // In development or local environments, allow any localhost/127.0.0.1 port
+      if (
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+        allowedOrigins.includes(origin)
+      ) {
         return callback(null, true);
       }
 
+      console.warn(`[CORS] Rejected origin: ${origin}`);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200,
   })
 );
 
@@ -44,7 +59,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Logging
-app.use(morgan('combined'));
+app.use(morgan('dev'));
 
 // Rate limiting
 app.use('/api/auth', rateLimiter.authLimiter);
@@ -54,13 +69,14 @@ app.use('/api', rateLimiter.apiLimiter);
 
 // Health check endpoint (no auth required)
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/collections', collectionRoutes);
 
 // Multer-specific errors -> 400
 app.use((err, req, res, next) => {
@@ -108,7 +124,7 @@ app.use((err, req, res, next) => {
 const PORT = env.port;
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`   Frontend origin: ${env.frontendUrl}`);
+  console.log(`   Allowed origins: ${allowedOrigins.join(', ')} (and all localhost ports)`);
   console.log(`   Environment: ${env.nodeEnv}`);
 });
 

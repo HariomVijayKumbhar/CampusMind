@@ -70,7 +70,7 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  sendMessage: async (content) => {
+  sendMessage: async (content, collectionId = null) => {
     const trimmed = content.trim();
     if (!trimmed) return;
 
@@ -91,7 +91,10 @@ export const useChatStore = create((set, get) => ({
     }));
 
     try {
-      const response = await api.post('/api/chat', { message: trimmed });
+      const response = await api.post('/api/chat', {
+        message: trimmed,
+        collection_id: collectionId || null,
+      });
 
       const assistantMsg = {
         id: `temp-assistant-${tempIdCounter}`,
@@ -100,6 +103,9 @@ export const useChatStore = create((set, get) => ({
         sources: Array.isArray(response.data.sources)
           ? response.data.sources
           : [],
+        confidence: typeof response.data.confidence === 'number'
+          ? response.data.confidence
+          : null,
         created_at: new Date().toISOString(),
       };
 

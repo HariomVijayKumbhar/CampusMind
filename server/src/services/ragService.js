@@ -1,11 +1,12 @@
-// RAG Service - similarity search, prompt assembly, LLM calls (OpenRouter / Groq), fallback logic
-// Supports OpenRouter and Groq as AI providers
+// RAG Service - orchestrates the full pipeline:
+// rewrite (Phase 5) -> hybrid retrieve (semantic + keyword + RRF) -> LLM re-rank ->
+// fallback check -> prompt assembly -> Groq generation.
 
-const supabase = require('../config/supabaseClient');
-const embeddingService = require('./embeddingService');
-const ragConfig = require('../config/rag');
 const { Groq } = require('groq-sdk');
-const RecursiveCharacterTextSplitter = require('../utils/textSplitter');
+const ragConfig = require('../config/rag');
+const retrievalService = require('./retrievalService');
+const rerankService = require('./rerankService');
+const cacheService = require('./cacheService');
 
 let groqInstance = null;
 if (ragConfig.groqApiKey) {
@@ -16,36 +17,67 @@ if (ragConfig.groqApiKey) {
   }
 }
 
-const textSplitter = new RecursiveCharacterTextSplitter();
+const FALLBACK_ANSWER =
+  "I couldn't find relevant information in the uploaded college documents for your question. Please try rephrasing your question or check back later.";
 
-function chunkText(text, chunkSize = ragConfig.chunkSize, chunkOverlap = ragConfig.chunkOverlap) {
-  return textSplitter.splitText(text, chunkSize, chunkOverlap);
-}
-
-async function retrieveContext(questionText) {
-  try {
-    const questionEmbedding = await embeddingService.embedText(questionText);
-
-    const { data: chunks, error } = await supabase.rpc('match_document_chunks', {
-      query_embedding: questionEmbedding,
-      match_count: ragConfig.topK,
-    });
-
-    if (error) {
-      throw new Error(`Similarity search failed: ${error.message}`);
-    }
-
-    const relevantChunks = (chunks || []).filter(
-      (chunk) => chunk.similarity >= ragConfig.similarityThreshold
-    );
-
-    return relevantChunks;
-  } catch (error) {
-    console.error('Retrieval error:', error);
-    throw error;
+/**
+ * Generate the embedding for a question, using the question cache when possible.
+ */
+async function embedQuestion(question) {
+  const cached = cacheService.getCachedEmbedding(question);
+  if (cached) {
+    return cached;
   }
+
+  const embeddingService = require('./embeddingService');
+  const embedding = await embeddingService.embedText(question);
+  cacheService.setCachedEmbedding(question, embedding);
+  return embedding;
 }
 
+/**
+ * Locate the most relevant span in a chunk and shape a citation.
+ * `highlighted_span` = { text, start, end } offsets into `excerpt`.
+ */
+function buildSource(chunk, idx) {
+  const content = chunk.content || '';
+  const documentTitle = chunk.document_title || 'Campus Document';
+
+  // Prefer the top-ranked chunk: highlight the whole excerpt (it is the answer source).
+  // For lower-ranked chunks, highlight the best-scoring sentence when possible.
+  let start = 0;
+  let end = content.length;
+
+  if (idx > 0 && content.length > 240) {
+    const sentences = content.match(/[^.!?\n]+[.!?]?/g) || [];
+    if (sentences.length > 1) {
+      const candidates = sentences
+        .map((sentence) => ({ sentence, score: sentence.length }))
+        .sort((a, b) => b.score - a.score);
+      const best = candidates[0].sentence;
+      start = content.indexOf(best);
+      end = start + best.length;
+    }
+  }
+
+  return {
+    document_title: documentTitle,
+    excerpt: content,
+    highlighted_span: { text: content.slice(start, end), start, end },
+    confidence: typeof chunk.relevanceScore === 'number' ? chunk.relevanceScore / 10 : null,
+    similarity: chunk.similarity ?? null,
+  };
+}
+
+function buildSources(chunks) {
+  return chunks.map((chunk, idx) => buildSource(chunk, idx));
+}
+
+/**
+ * Assemble the generation prompt from the re-ranked context chunks.
+ * Conversation history is used in Phase 5 (query rewriting); the LLM still gets
+ * it here for conversational coherence.
+ */
 function assemblePrompt(question, chunks, conversationHistory = []) {
   const contextText = chunks
     .map((chunk, i) => `[Chunk ${i + 1} - ${chunk.document_title || 'Document'}]\n${chunk.content}`)
@@ -72,138 +104,136 @@ Answer:`;
   return { systemPrompt, userPrompt };
 }
 
-async function callOpenRouter(systemPrompt, userPrompt) {
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${ragConfig.openrouterApiKey}`,
-        'HTTP-Referer': 'https://campusmind.local',
-        'X-Title': 'CampusMind',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: ragConfig.openrouterModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: ragConfig.llmTemperature,
-        max_tokens: ragConfig.llmMaxTokens,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
-    }
-
-    const data = await response.json();
-    const answerText = data.choices?.[0]?.message?.content?.trim() || '';
-    return answerText;
-  } catch (error) {
-    console.error('OpenRouter error:', error);
-    throw new Error(`OpenRouter error: ${error.message}`);
-  }
-}
-
-async function callGroq(systemPrompt, userPrompt) {
-  try {
-    if (!groqInstance) {
-      throw new Error('Groq client is not configured.');
-    }
-
-    const chatCompletion = await groqInstance.chat.completions.create({
-      model: ragConfig.groqModel,
-      max_tokens: ragConfig.llmMaxTokens,
-      temperature: ragConfig.llmTemperature,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    });
-
-    const answerText =
-      chatCompletion.choices?.[0]?.message?.content?.trim() || '';
-
-    return answerText;
-  } catch (error) {
-    console.error('Groq error:', error);
-    throw new Error(`Groq error: ${error.message}`);
-  }
-}
-
-async function callLLM(systemPrompt, userPrompt) {
-  if (ragConfig.aiProvider === 'openrouter' && ragConfig.openrouterApiKey) {
-    console.log(`[RAG] Calling OpenRouter model: ${ragConfig.openrouterModel}`);
-    return await callOpenRouter(systemPrompt, userPrompt);
+/**
+ * Stream the answer from Groq token-by-token.
+ * Returns { tokenGenerator, finalize } where tokenGenerator is an async generator
+ * yielding each token and finalize() drains the stream and resolves to the full text.
+ */
+function createAnswerStream(systemPrompt, userPrompt) {
+  if (!groqInstance) {
+    throw new Error('Groq client is not configured.');
   }
 
-  if (ragConfig.groqApiKey) {
-    console.log(`[RAG] Calling Groq model: ${ragConfig.groqModel}`);
-    return await callGroq(systemPrompt, userPrompt);
+  const streamPromise = groqInstance.chat.completions.create({
+    model: ragConfig.groqModel,
+    max_tokens: ragConfig.llmMaxTokens,
+    temperature: ragConfig.llmTemperature,
+    stream: true,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+  });
+
+  async function* tokenGenerator() {
+    const stream = await streamPromise;
+    let fullText = '';
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        fullText += delta;
+        yield delta;
+      }
+    }
+    return fullText;
   }
 
-  throw new Error('No valid AI provider configured. Please check your OPENROUTER_API_KEY or GROQ_API_KEY.');
+  const iterator = tokenGenerator();
+  const finalize = async () => {
+    let last = '';
+    for await (const value of iterator) {
+      last = value;
+    }
+    return last;
+  };
+
+  return { tokenGenerator, finalize };
 }
 
-function extractSources(chunks) {
-  return chunks.map((chunk) => ({
-    document_title: chunk.document_title,
-    excerpt: chunk.content.substring(0, 200) + '...',
-    similarity: chunk.similarity,
-  }));
-}
+/**
+ * Full hybrid RAG pipeline. Returns either a fallback result or a generation
+ * descriptor:
+ * - fallback: { answer, sources: [], usedFallback: true, confidence: 0 }
+ * - hit: { prompt, sources, confidence, stream } where stream.tokenGenerator()
+ *   yields answer tokens and stream.finalize() resolves to the full text.
+ */
+async function generateAnswerStream(question, userId, conversationHistory = [], collectionId = null) {
+  if (!question || typeof question !== 'string') {
+    throw new Error('Question must be a non-empty string');
+  }
 
-async function generateAnswer(question, userId, conversationHistory = []) {
-  try {
-    if (!question || typeof question !== 'string') {
-      throw new Error('Question must be a non-empty string');
-    }
+  console.log(
+    `[RAG] Processing question for user ${userId}: ${question.substring(0, 50)}...`
+  );
 
-    console.log(`[RAG] Processing question for user ${userId}: ${question.substring(0, 50)}...`);
+  const candidates = await retrievalService.hybridRetrieve(question, collectionId);
 
-    const relevantChunks = await retrieveContext(question);
-
-    console.log(`[RAG] Retrieved ${relevantChunks.length} relevant chunks`);
-
-    if (relevantChunks.length === 0) {
-      console.log('[RAG] Fallback: No relevant context found');
-
-      return {
-        answer:
-          "I couldn't find relevant information in the uploaded college documents for your question. Please try rephrasing your question or upload relevant documents to the knowledge base.",
-        sources: [],
-        usedFallback: true,
-      };
-    }
-
-    const { systemPrompt, userPrompt } = assemblePrompt(question, relevantChunks, conversationHistory);
-
-    const answer = await callLLM(systemPrompt, userPrompt);
-
-    const sources = extractSources(relevantChunks);
-
-    console.log(`[RAG] Answer generated with ${sources.length} sources`);
-
+  if (candidates.length === 0) {
+    console.log('[RAG] Fallback: No candidates retrieved');
     return {
-      answer,
-      sources,
-      usedFallback: false,
+      answer: FALLBACK_ANSWER,
+      sources: [],
+      usedFallback: true,
+      confidence: 0,
     };
-  } catch (error) {
-    console.error('[RAG] Error in RAG pipeline:', error);
-    throw error;
   }
+
+  // LLM re-ranking: one batched Groq call for all candidates
+  const reranked = await rerankService.rerankChunks(question, candidates);
+  const bestScore = reranked.length > 0 ? reranked[0].relevanceScore : 0;
+
+  // Explicit, testable fallback rule (config/rag.js)
+  if (bestScore < ragConfig.fallbackRelevanceThreshold) {
+    console.log(`[RAG] Fallback: best re-rank score ${bestScore} < threshold ${ragConfig.fallbackRelevanceThreshold}`);
+    return {
+      answer: FALLBACK_ANSWER,
+      sources: [],
+      usedFallback: true,
+      confidence: 0,
+    };
+  }
+
+  const topChunks = reranked.slice(0, ragConfig.rerankTopK);
+  const sources = buildSources(topChunks);
+  const confidence = topChunks[0].relevanceScore / 10; // 0-1 from best re-rank score
+
+  const { systemPrompt, userPrompt } = assemblePrompt(question, topChunks, conversationHistory);
+
+  const stream = createAnswerStream(systemPrompt, userPrompt);
+
+  return {
+    prompt: { systemPrompt, userPrompt },
+    sources,
+    confidence,
+    usedFallback: false,
+    stream,
+  };
+}
+
+/**
+ * Non-streamed variant: used by the integration test suite.
+ */
+async function generateAnswer(question, userId, conversationHistory = [], collectionId = null) {
+  const result = await generateAnswerStream(question, userId, conversationHistory, collectionId);
+
+  if (result.usedFallback) {
+    return { answer: result.answer, sources: [], usedFallback: true, confidence: 0 };
+  }
+
+  const answer = await result.stream.finalize();
+  return {
+    answer,
+    sources: result.sources,
+    usedFallback: false,
+    confidence: result.confidence,
+  };
 }
 
 module.exports = {
   generateAnswer,
-  retrieveContext,
+  generateAnswerStream,
   assemblePrompt,
-  callOpenRouter,
-  callGroq,
-  callLLM,
-  extractSources,
-  chunkText,
+  buildSources,
+  buildSource,
+  FALLBACK_ANSWER,
 };

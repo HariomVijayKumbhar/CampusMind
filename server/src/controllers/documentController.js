@@ -5,12 +5,13 @@ async function uploadDocument(req, res) {
   try {
     const userId = req.userId;
     const file = req.file;
+    const collectionId = req.body.collection_id || null;
 
     if (!file) {
       return res.status(400).json({ error: 'No file provided' });
     }
 
-    const document = await documentService.uploadDocument(file, userId);
+    const document = await documentService.uploadDocument(file, userId, collectionId);
 
     res.status(201).json({
       success: true,
@@ -43,7 +44,8 @@ async function deleteDocument(req, res) {
 
 async function listDocuments(req, res) {
   try {
-    const documents = await documentService.listDocuments();
+    const collectionId = req.query.collection_id || null;
+    const documents = await documentService.listDocuments(collectionId);
 
     res.json({
       success: true,

@@ -1,4 +1,4 @@
-const supabase = require('../config/supabaseClient');
+const authService = require('../services/authService');
 
 /**
  * Middleware to verify user is admin
@@ -6,20 +6,13 @@ const supabase = require('../config/supabaseClient');
  */
 async function requireAdmin(req, res, next) {
   try {
-    // requireAuth must run first
     if (!req.userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Fetch user profile from database
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', req.userId)
-      .single();
+    const profile = await authService.getProfile(req.user || req.userId);
 
-    if (error || !profile) {
-      console.error('Failed to fetch profile:', error);
+    if (!profile) {
       return res.status(403).json({ error: 'Forbidden: Profile not found' });
     }
 
@@ -27,9 +20,7 @@ async function requireAdmin(req, res, next) {
       return res.status(403).json({ error: 'Forbidden: Admin access required' });
     }
 
-    // Attach role to request
     req.userRole = profile.role;
-
     next();
   } catch (error) {
     console.error('Admin middleware error:', error);

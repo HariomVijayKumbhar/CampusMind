@@ -1,9 +1,10 @@
-// Document Service - PDF upload, extraction, chunking, embedding, storage
-// Operates fully in memory to comply with ephemeral server environments
+// Document Service - PDF and Image (PNG/JPG/JPEG/WEBP) upload, OCR extraction, chunking, embedding, storage
+// Operates fully in memory for ephemeral cloud deployments
 
 const pdfParse = require('pdf-parse');
 const supabase = require('../config/supabaseClient');
 const embeddingService = require('./embeddingService');
+const ocrService = require('./ocrService');
 const ragConfig = require('../config/rag');
 const RecursiveCharacterTextSplitter = require('../utils/textSplitter');
 
@@ -15,9 +16,10 @@ const textSplitter = new RecursiveCharacterTextSplitter();
 async function extractPdfText(fileBuffer) {
   try {
     const data = await pdfParse(fileBuffer);
-    return data.text;
+    return data.text || '';
   } catch (error) {
-    throw new Error(`Failed to extract PDF text: ${error.message}`);
+    console.warn(`[PDF Parse] Standard extraction warning: ${error.message}`);
+    return '';
   }
 }
 
@@ -71,31 +73,54 @@ async function updateDocumentStatus(documentId, status) {
 }
 
 /**
- * Upload and process a PDF document synchronously in memory
+ * Upload and process a PDF or Image (PNG/JPG/JPEG/WEBP) synchronously in memory
  */
-async function uploadDocument(file, userId) {
+async function uploadDocument(file, userId, collectionId = null) {
   if (!file || !file.buffer) {
-    throw new Error('Invalid file');
+    throw new Error('Invalid file payload.');
   }
 
-  if (file.mimetype !== 'application/pdf') {
-    throw new Error('Only PDF files are allowed');
+  const isImage = file.mimetype.startsWith('image/');
+  const isPdf = file.mimetype === 'application/pdf';
+
+  if (!isImage && !isPdf) {
+    throw new Error('Supported file types: PDF, PNG, JPG, JPEG, and WEBP.');
   }
 
   if (file.size > 10 * 1024 * 1024) {
-    throw new Error('File size exceeds 10MB limit');
+    throw new Error('File size exceeds 10MB limit.');
   }
 
-  const pdfText = await extractPdfText(file.buffer);
+  let extractedText = '';
 
-  if (!pdfText || pdfText.trim().length === 0) {
-    throw new Error('PDF contains no readable text');
+  if (isImage) {
+    console.log(`[DocumentService] Processing image upload with OCR: ${file.originalname}`);
+    extractedText = await ocrService.extractTextFromImage(file.buffer);
+  } else if (isPdf) {
+    console.log(`[DocumentService] Extracting text from PDF: ${file.originalname}`);
+    extractedText = await extractPdfText(file.buffer);
+
+    // If PDF text is empty or very small (e.g. scanned image PDF), run OCR fallback
+    if (!extractedText || extractedText.trim().length < 20) {
+      console.log(`[DocumentService] PDF appears to be a scanned image. Running OCR extraction...`);
+      try {
+        extractedText = await ocrService.extractTextFromImage(file.buffer);
+      } catch (ocrErr) {
+        console.warn(`[DocumentService] PDF OCR fallback warning: ${ocrErr.message}`);
+      }
+    }
   }
 
-  const chunks = chunkText(pdfText);
+  if (!extractedText || extractedText.trim().length === 0) {
+    throw new Error(
+      'Could not extract readable text from the uploaded document or image. Please ensure the image is clear.'
+    );
+  }
+
+  const chunks = chunkText(extractedText);
 
   if (chunks.length === 0) {
-    throw new Error('Failed to create chunks from PDF');
+    throw new Error('Failed to create text chunks from the extracted content.');
   }
 
   const { data: documentData, error: docError } = await supabase
@@ -103,6 +128,7 @@ async function uploadDocument(file, userId) {
     .insert({
       title: file.originalname,
       uploaded_by: userId,
+      collection_id: collectionId,
       status: 'ready',
     })
     .select()
@@ -115,10 +141,15 @@ async function uploadDocument(file, userId) {
   try {
     const chunkCount = await generateAndStoreChunks(documentData.id, chunks);
 
+    console.log(
+      `✓ Successfully indexed ${file.originalname}: ${chunkCount} chunks, ${extractedText.length} characters.`
+    );
+
     return {
       id: documentData.id,
       title: documentData.title,
       uploaded_by: documentData.uploaded_by,
+      collection_id: documentData.collection_id,
       created_at: documentData.created_at,
       status: 'ready',
       chunk_count: chunkCount,
@@ -141,7 +172,7 @@ async function deleteDocument(documentId, userId) {
       .single();
 
     if (docError || !doc) {
-      throw new Error('Document not found');
+      throw new Error('Document not found.');
     }
 
     const { error: deleteError } = await supabase
@@ -163,14 +194,20 @@ async function deleteDocument(documentId, userId) {
 }
 
 /**
- * List all documents with chunk counts
+ * List all documents with chunk counts (optionally filtered by collection)
  */
-async function listDocuments() {
+async function listDocuments(collectionId = null) {
   try {
-    const { data: documents, error: docsError } = await supabase
+    let query = supabase
       .from('documents')
-      .select('id, title, uploaded_by, status, created_at')
+      .select('id, title, uploaded_by, collection_id, status, created_at')
       .order('created_at', { ascending: false });
+
+    if (collectionId) {
+      query = query.eq('collection_id', collectionId);
+    }
+
+    const { data: documents, error: docsError } = await query;
 
     if (docsError) {
       throw new Error(`Failed to list documents: ${docsError.message}`);
@@ -185,11 +222,11 @@ async function listDocuments() {
     }
 
     const counts = {};
-    chunkCounts.forEach((chunk) => {
+    (chunkCounts || []).forEach((chunk) => {
       counts[chunk.document_id] = (counts[chunk.document_id] || 0) + 1;
     });
 
-    const docsWithCounts = documents.map((doc) => ({
+    const docsWithCounts = (documents || []).map((doc) => ({
       ...doc,
       chunk_count: counts[doc.id] || 0,
     }));
@@ -212,7 +249,7 @@ async function getDocument(documentId) {
     .single();
 
   if (error || !document) {
-    throw new Error('Document not found');
+    throw new Error('Document not found.');
   }
 
   const { data: chunks, error: chunksError } = await supabase

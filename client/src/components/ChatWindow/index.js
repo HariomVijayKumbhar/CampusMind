@@ -91,6 +91,11 @@ export default function ChatWindow() {
   const textareaRef = useRef(null);
   const previousScrollHeight = useRef(0);
 
+  // Load chat history on initial mount
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;

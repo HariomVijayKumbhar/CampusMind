@@ -3,26 +3,18 @@ import Link from 'next/link';
 import Head from 'next/head';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuthStore } from '@/store/authStore';
-import api from '@/services/api';
 
 export default function Settings() {
-  const [profile, setProfile] = useState(null);
+  const profile = useAuthStore((state) => state.profile);
+  const fetchProfile = useAuthStore((state) => state.fetchProfile);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
+  // Profile is loaded centrally in authStore.initializeAuth. This just
+  // guarantees it's available (cached, no extra request if already loaded)
+  // and updates the local loading state for this page.
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const response = await api.get('/api/auth/profile');
-        setProfile(response.data);
-      } catch (err) {
-        console.error('Failed to fetch profile:', err);
-      } finally {
-        setLoadingProfile(false);
-      }
-    };
-
-    fetchProfile();
-  }, []);
+    fetchProfile().finally(() => setLoadingProfile(false));
+  }, [fetchProfile]);
 
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)

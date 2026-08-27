@@ -7,11 +7,15 @@ import { useEffect, useState } from 'react';
  * - Redirects unauthenticated users to /login.
  * - When adminOnly=true, verifies role via GET /api/auth/profile and redirects
  *   non-admins to /chat. The backend is authoritative for role checks.
+ *
+ * The profile is fetched ONCE and shared via the auth store, so this (and the
+ * pages it wraps) never spam /api/auth/profile and trip the rate limiter.
  */
 export default function ProtectedRoute({ children, adminOnly = false }) {
   const router = useRouter();
   const { session, loading } = useAuthStore();
-  const [userRole, setUserRole] = useState(null);
+  const profile = useAuthStore((state) => state.profile);
+  const fetchProfile = useAuthStore((state) => state.fetchProfile);
   const [roleLoading, setRoleLoading] = useState(adminOnly);
 
   useEffect(() => {
@@ -31,25 +35,11 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
     }
 
     if (adminOnly) {
-      // Fetch role from backend (source of truth)
-      const fetchRole = async () => {
+      // Profile is the single shared source of truth (cached after first load).
+      const verifyRole = async () => {
         try {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/auth/profile`,
-            {
-              headers: {
-                Authorization: `Bearer ${session.access_token}`,
-              },
-            }
-          );
-
-          if (response.ok) {
-            const profile = await response.json();
-            setUserRole(profile.role);
-            if (profile.role !== 'admin') {
-              router.push('/chat');
-            }
-          } else {
+          const p = await fetchProfile();
+          if (!p || p.role !== 'admin') {
             router.push('/chat');
           }
         } catch (error) {
@@ -60,11 +50,11 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
         }
       };
 
-      fetchRole();
+      verifyRole();
     } else {
       setRoleLoading(false);
     }
-  }, [loading, session, adminOnly, router]);
+  }, [loading, session, adminOnly, router, fetchProfile]);
 
   if (loading || roleLoading) {
     return (

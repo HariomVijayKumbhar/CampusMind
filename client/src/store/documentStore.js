@@ -6,16 +6,41 @@ const MAX_POLL_ATTEMPTS = 40;
 
 export const useDocumentStore = create((set, get) => ({
   documents: [],
+  collections: [],
   loading: false,
   uploading: false,
   pollingDocuments: {},
   error: '',
   success: '',
 
-  fetchDocuments: async () => {
+  fetchCollections: async () => {
+    try {
+      const response = await api.get('/api/collections');
+      set({ collections: response.data.collections || [] });
+      return response.data.collections || [];
+    } catch (err) {
+      set({ error: err.response?.data?.error || 'Failed to load collections' });
+      return [];
+    }
+  },
+
+  createCollection: async (name) => {
+    try {
+      const response = await api.post('/api/collections', { name });
+      set({ success: `Collection "${name}" created` });
+      await get().fetchCollections();
+      return response.data.collection;
+    } catch (err) {
+      set({ error: err.response?.data?.error || 'Failed to create collection' });
+      throw err;
+    }
+  },
+
+  fetchDocuments: async (collectionId = null) => {
     try {
       set({ loading: true, error: '' });
-      const response = await api.get('/api/documents');
+      const params = collectionId ? { collection_id: collectionId } : {};
+      const response = await api.get('/api/documents', { params });
       set({ documents: response.data.documents || [] });
     } catch (err) {
       set({ error: err.response?.data?.error || 'Failed to load documents' });
@@ -24,11 +49,14 @@ export const useDocumentStore = create((set, get) => ({
     }
   },
 
-  uploadDocument: async (file) => {
+  uploadDocument: async (file, collectionId = null) => {
     set({ error: '', success: '', uploading: true });
 
     const formData = new FormData();
     formData.append('file', file);
+    if (collectionId) {
+      formData.append('collection_id', collectionId);
+    }
 
     try {
       const response = await api.post('/api/documents', formData);

@@ -1,10 +1,18 @@
 import { useState, useRef } from 'react';
 
-const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
+const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp'];
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+];
 
 /**
- * PDF upload area with drag-and-drop and file picker fallback.
- * Validates type and size client-side before delegating to onUpload.
+ * Multi-format Document & Image Uploader with OCR support.
+ * Supports PDF, PNG, JPG, JPEG, WEBP.
  *
  * Props:
  * - onUpload(file): async handler that performs the upload
@@ -48,13 +56,16 @@ export default function DocumentUploader({ onUpload, uploading }) {
   const handleFile = (file) => {
     setLocalError('');
 
-    if (file.type !== 'application/pdf') {
-      setLocalError('Only PDF files are allowed.');
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    const isValidType = ALLOWED_MIME_TYPES.includes(file.type) || ALLOWED_EXTENSIONS.includes(ext);
+
+    if (!isValidType) {
+      setLocalError('Supported file formats: PDF, PNG, JPG, JPEG, and WEBP.');
       return;
     }
 
     if (file.size > MAX_SIZE_BYTES) {
-      setLocalError('File size must be less than 10 MB.');
+      setLocalError('File size must be less than 15 MB.');
       return;
     }
 
@@ -68,10 +79,15 @@ export default function DocumentUploader({ onUpload, uploading }) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const isImageFile = (file) => {
+    if (!file) return false;
+    return file.type?.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
+  };
+
   return (
     <div>
       {localError && (
-        <div className="cm-banner-error mb-4">
+        <div className="cm-banner-error mb-4 animate-fade-in">
           <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-400" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
           </svg>
@@ -80,7 +96,7 @@ export default function DocumentUploader({ onUpload, uploading }) {
       )}
 
       <div
-        id="pdf-drop-zone"
+        id="file-drop-zone"
         className={`relative overflow-hidden rounded-2xl border-2 border-dashed px-8 py-12 text-center transition-all duration-200 cursor-pointer ${
           dragActive
             ? 'border-violet-500/60 bg-violet-500/10'
@@ -113,16 +129,22 @@ export default function DocumentUploader({ onUpload, uploading }) {
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
                 <svg className="h-6 w-6 text-violet-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd"/>
+                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/>
                 </svg>
               </div>
             </div>
             <div>
-              <p className="text-sm font-semibold text-white">Processing document…</p>
+              <p className="text-sm font-semibold text-white">
+                {isImageFile(selectedFile) ? 'Running OCR on Image…' : 'Processing Document…'}
+              </p>
               {selectedFile && (
-                <p className="mt-1 text-xs text-slate-500">{selectedFile.name} · {formatSize(selectedFile.size)}</p>
+                <p className="mt-1 text-xs text-slate-400 font-medium">{selectedFile.name} · {formatSize(selectedFile.size)}</p>
               )}
-              <p className="mt-1 text-xs text-slate-600">Chunking and embedding — this may take a moment</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {isImageFile(selectedFile)
+                  ? 'Optical Character Recognition (OCR) + Semantic Embedding'
+                  : 'Text extraction, recursive chunking & vector indexing'}
+              </p>
             </div>
           </div>
         ) : (
@@ -146,9 +168,9 @@ export default function DocumentUploader({ onUpload, uploading }) {
 
             <div>
               <p className="text-sm font-semibold text-white">
-                {dragActive ? 'Drop to upload' : 'Drag & drop a PDF'}
+                {dragActive ? 'Drop file to upload' : 'Drag & drop PDF, Notice, or Image'}
               </p>
-              <p className="mt-1 text-xs text-slate-500">or click to browse your files</p>
+              <p className="mt-1 text-xs text-slate-400">PDF, PNG, JPG, JPEG, and WEBP supported</p>
             </div>
 
             <div
@@ -161,21 +183,28 @@ export default function DocumentUploader({ onUpload, uploading }) {
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd"/>
               </svg>
-              Select PDF
+              Select File
             </div>
 
-            <p className="text-xs text-slate-600">PDF files up to 10 MB</p>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                OCR Enabled
+              </span>
+              <span>·</span>
+              <span>Up to 15 MB</span>
+            </div>
           </div>
         )}
 
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,application/pdf"
+          accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
           onChange={handleFileInput}
           disabled={uploading}
           className="hidden"
-          aria-label="Upload PDF file"
+          aria-label="Upload document or image"
         />
       </div>
     </div>
