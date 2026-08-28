@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 
-const MAX_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
+const MAX_SIZE_BYTES = 30 * 1024 * 1024; // 30MB (must match server limit)
 const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp'];
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -65,7 +65,7 @@ export default function DocumentUploader({ onUpload, uploading }) {
     }
 
     if (file.size > MAX_SIZE_BYTES) {
-      setLocalError('File size must be less than 15 MB.');
+      setLocalError('File size must be less than 30 MB.');
       return;
     }
 
@@ -192,7 +192,7 @@ export default function DocumentUploader({ onUpload, uploading }) {
                 OCR Enabled
               </span>
               <span>·</span>
-              <span>Up to 15 MB</span>
+              <span>Up to 30 MB</span>
             </div>
           </div>
         )}

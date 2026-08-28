@@ -57,6 +57,10 @@ async function saveMessage(userId, role, content, sources = [], userObj = null) 
   }
 }
 
+// Fetch the newest page first (descending), then reverse so the caller gets
+// chronological order. Pagination walks backward through older messages using
+// a strict `lt` cursor (the oldest created_at of the previous page) so the
+// cursor message itself is never re-fetched/duplicated.
 async function getHistory(userId, cursor = null, limit = PAGE_SIZE) {
   try {
     if (!userId) {
@@ -67,10 +71,32 @@ async function getHistory(userId, cursor = null, limit = PAGE_SIZE) {
       .from('chat_messages')
       .select('id, user_id, role, content, sources, created_at')
       .eq('user_id', userId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
 
+    let cursorCreatedAt = null;
+    let cursorId = null;
     if (cursor) {
-      query = query.gte('created_at', cursor);
+      // Cursor format: "created_at|id" so rows sharing a created_at timestamp
+      // are not skipped when paging backward.
+      const separatorIndex = cursor.indexOf('|');
+      if (separatorIndex !== -1) {
+        cursorCreatedAt = cursor.slice(0, separatorIndex);
+        cursorId = cursor.slice(separatorIndex + 1);
+      } else {
+        cursorCreatedAt = cursor;
+      }
+    }
+
+    if (cursorCreatedAt) {
+      if (cursorId) {
+        // Rows strictly older than the cursor tuple (created_at, id)
+        query = query.or(
+          `created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`
+        );
+      } else {
+        query = query.lt('created_at', cursorCreatedAt);
+      }
     }
 
     query = query.limit(limit);
@@ -85,14 +111,17 @@ async function getHistory(userId, cursor = null, limit = PAGE_SIZE) {
       };
     }
 
-    const messages = data || [];
-    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+    // data is newest-first; reverse to chronological order for the client
+    const messages = (data || []).reverse();
+    // Cursor for loading the next OLDER page = oldest message of this page,
+    // encoded as "created_at|id" to disambiguate identical timestamps.
+    const oldestMessage = messages.length > 0 ? messages[0] : null;
     const hasMore = messages.length >= limit;
 
     return {
       messages,
       pagination: {
-        cursor: lastMessage ? lastMessage.created_at : null,
+        cursor: oldestMessage ? `${oldestMessage.created_at}|${oldestMessage.id}` : null,
         hasMore,
         limit,
       },

@@ -1,5 +1,5 @@
 // RAG Service - orchestrates the full pipeline:
-// rewrite (Phase 5) -> hybrid retrieve (semantic + keyword + RRF) -> LLM re-rank ->
+// hybrid retrieve (semantic + keyword + RRF) -> LLM re-rank ->
 // fallback check -> prompt assembly -> Groq generation.
 
 const { Groq } = require('groq-sdk');
@@ -75,8 +75,8 @@ function buildSources(chunks) {
 
 /**
  * Assemble the generation prompt from the re-ranked context chunks.
- * Conversation history is used in Phase 5 (query rewriting); the LLM still gets
- * it here for conversational coherence.
+ * Conversation history is included verbatim in the prompt for conversational
+ * coherence (no separate query-rewriting step).
  */
 function assemblePrompt(question, chunks, conversationHistory = []) {
   const contextText = chunks

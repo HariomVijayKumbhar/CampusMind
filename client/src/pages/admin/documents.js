@@ -63,11 +63,6 @@ export default function Documents() {
     fetchCollections();
   }, [fetchDocuments, fetchCollections]);
 
-  useEffect(() => {
-    const activeDocuments = documents.filter((d) => d.status === 'processing');
-    activeDocuments.forEach((d) => useDocumentStore.getState().startPolling(d.id));
-  }, [documents]);
-
   const handleUpload = async (file) => {
     clearError();
     clearSuccess();
@@ -320,11 +315,6 @@ export default function Documents() {
                           </div>
 
                           <div className="flex items-center gap-3">
-                            {doc.ocr_used && (
-                              <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400" title="OCR was used to extract text from this document">
-                                OCR
-                              </span>
-                            )}
                             <StatusBadge status={doc.status || 'ready'} />
                             <button
                               type="button"

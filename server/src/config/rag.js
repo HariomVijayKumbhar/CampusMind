@@ -13,7 +13,6 @@ module.exports = {
   keywordTopK: 15, // candidates from Postgres tsvector full-text search
   fusionTopK: 10, // merged candidates after Reciprocal Rank Fusion
   rerankTopK: 5, // final context chunks after LLM re-ranking
-  similarityThreshold: 0.3, // minimum cosine similarity to use retrieved context
   fallbackRelevanceThreshold: 5.0, // minimum best re-rank score (0-10) to answer; below this -> "I couldn't find relevant information..."
 
   // RRF fusion constant: score = 1 / (rrfK + rank)
@@ -24,7 +23,6 @@ module.exports = {
   questionCacheTtlSeconds: 3600,
 
   // Re-ranking prompt: model is asked to score each chunk's relevance from 0-10
-  rerankMaxScore: 10,
   rerankScoreRange: [0, 10], // inclusive, validated when parsing model output
 
   // Embedding model
@@ -32,7 +30,7 @@ module.exports = {
   embeddingDim: 384, // dimension of embeddings
 
   // LLM (Groq)
-  groqModel: env.groq.model, // default 'llama-3.3-70b-versatile'
+  groqModel: env.groq.model, // default 'qwen/qwen3.8-27b' (see config/env.js)
   groqApiKey: env.groq.apiKey,
   llmTemperature: 0.7,
   llmMaxTokens: 1024,

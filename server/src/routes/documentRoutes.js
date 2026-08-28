@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const requireAuth = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
-const { uploadDocument, deleteDocument, listDocuments } = require('../controllers/documentController');
+const { uploadDocument, deleteDocument, listDocuments, getDocument } = require('../controllers/documentController');
 
 const router = express.Router();
 
@@ -17,7 +17,7 @@ const ALLOWED_MIME_TYPES = [
 // Configure multer for memory storage (Render & cloud hosts have ephemeral filesystem)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB max
   fileFilter: (req, file, cb) => {
     if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
@@ -29,6 +29,9 @@ const upload = multer({
 
 // GET /api/documents - List documents
 router.get('/', requireAuth, listDocuments);
+
+// GET /api/documents/:id - Get a single document (used by polling/status checks)
+router.get('/:id', requireAuth, getDocument);
 
 // POST /api/documents - Upload document (PDF or Image with OCR)
 router.post('/', requireAuth, requireAdmin, upload.single('file'), uploadDocument);

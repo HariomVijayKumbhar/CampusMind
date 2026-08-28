@@ -87,8 +87,8 @@ async function uploadDocument(file, userId, collectionId = null) {
     throw new Error('Supported file types: PDF, PNG, JPG, JPEG, and WEBP.');
   }
 
-  if (file.size > 10 * 1024 * 1024) {
-    throw new Error('File size exceeds 10MB limit.');
+  if (file.size > 30 * 1024 * 1024) {
+    throw new Error('File size exceeds 30MB limit.');
   }
 
   let extractedText = '';
