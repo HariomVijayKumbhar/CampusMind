@@ -1,16 +1,15 @@
 import { create } from 'zustand';
-import { supabase } from '@/services/supabaseClient';
+import { supabase, isSupabaseConfigured } from '@/services/supabaseClient';
+
+const SUPABASE_NOT_CONFIGURED_ERROR =
+  'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in client/.env.local and restart the Next.js dev server.';
 
 export const useAuthStore = create((set, get) => ({
   session: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('authSession') || 'null') : null,
   user: null,
-  // User profile from the backend. Fetched ONCE and shared across all pages
-  // so we don't spam /api/auth/profile (which would trip the rate limiter).
   profile: null,
   loading: true,
 
-  // Fetch the user profile from the backend. Cached: once loaded it won't
-  // hit the API again unless `force` is true. Pass `force` to refresh.
   fetchProfile: async (force = false) => {
     const { profile, session } = get();
     if (profile && !force) return profile;
@@ -20,9 +19,7 @@ export const useAuthStore = create((set, get) => ({
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/auth/profile`,
         {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers: { Authorization: `Bearer ${session.access_token}` },
         }
       );
 
@@ -40,9 +37,12 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Initialize session from localStorage and Supabase
   initializeAuth: async () => {
     try {
+      if (!isSupabaseConfigured()) {
+        throw new Error(SUPABASE_NOT_CONFIGURED_ERROR);
+      }
+
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
 
@@ -51,7 +51,6 @@ export const useAuthStore = create((set, get) => ({
         if (typeof window !== 'undefined') {
           localStorage.setItem('authSession', JSON.stringify(data.session));
         }
-        // Load the profile once, in the background, as the single source of truth.
         get().fetchProfile();
       } else {
         set({ session: null, user: null, profile: null });
@@ -67,15 +66,16 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Sign up with email and password
   signup: async (email, password, fullName) => {
     try {
+      if (!isSupabaseConfigured()) {
+        return { success: false, error: SUPABASE_NOT_CONFIGURED_ERROR };
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: { full_name: fullName },
-        },
+        options: { data: { full_name: fullName } },
       });
 
       if (error) throw error;
@@ -91,9 +91,12 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Login with email and password
   login: async (email, password) => {
     try {
+      if (!isSupabaseConfigured()) {
+        return { success: false, error: SUPABASE_NOT_CONFIGURED_ERROR };
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -112,9 +115,12 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Logout
   logout: async () => {
     try {
+      if (!isSupabaseConfigured()) {
+        return { success: false, error: SUPABASE_NOT_CONFIGURED_ERROR };
+      }
+
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
 

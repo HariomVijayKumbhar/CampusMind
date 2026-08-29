@@ -10,7 +10,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+const isSupabaseConfigured = () => {
+  return !!(
+    supabaseUrl &&
+    supabaseAnonKey &&
+    !supabaseUrl.includes('placeholder') &&
+    !supabaseAnonKey.includes('placeholder')
+  );
+};
+
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-anon-key'
+  isSupabaseConfigured() ? supabaseUrl : 'https://placeholder.supabase.co',
+  isSupabaseConfigured() ? supabaseAnonKey : 'placeholder-anon-key'
 );
+
+export { isSupabaseConfigured };
