@@ -62,17 +62,40 @@ async function attachChunkMeta(ids) {
  * Semantic search via pgvector (top semanticTopK).
  */
 async function semanticSearch(questionEmbedding, collectionId = null) {
-  const { data, error } = await supabase.rpc('match_document_chunks', {
-    query_embedding: questionEmbedding,
-    match_count: ragConfig.semanticTopK,
-    filter_collection: collectionId || null,
-  });
+  try {
+    const { data, error } = await supabase.rpc('match_document_chunks', {
+      query_embedding: questionEmbedding,
+      match_count: ragConfig.semanticTopK,
+      filter_collection: collectionId || null,
+    });
 
-  if (error) {
-    throw new Error(`Semantic search failed: ${error.message}`);
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    // Fallback: if the database hasn't been migrated to the 3-arg
+    // match_document_chunks yet, retry without collection filtering
+    // so the chat keeps working while migrations are applied.
+    if (
+      collectionId &&
+      /match_document_chunks/i.test(error.message || '') &&
+      /function .* does not exist|schema cache/i.test(error.message || '')
+    ) {
+      const { data, error: fallbackError } = await supabase.rpc(
+        'match_document_chunks',
+        {
+          query_embedding: questionEmbedding,
+          match_count: ragConfig.semanticTopK,
+        }
+      );
+
+      if (fallbackError) throw fallbackError;
+
+      return data || [];
+    }
+
+    throw error;
   }
-
-  return data || [];
 }
 
 /**
