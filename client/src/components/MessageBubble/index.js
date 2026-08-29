@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import SourcesPanel from '@/components/SourcesPanel';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
+import { useChatStore } from '@/store/chatStore';
+import { useSpeechOutput } from '@/hooks/useSpeech';
 
 /**
  * Renders a single chat message with copy response, feedback buttons (👍 / 👎), and sources panel.
@@ -12,7 +14,9 @@ export default function MessageBubble({ message, index = 0 }) {
   const sources = message.sources || [];
 
   const [copied, setCopied] = useState(false);
-  const [feedback, setFeedback] = useState(null); // 'up' | 'down' | null
+  const rateMessage = useChatStore((state) => state.rateMessage);
+  const { ttsSupported, speaking, speak, stopSpeaking } = useSpeechOutput();
+  const feedback = message.myRating || null;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
@@ -53,7 +57,7 @@ export default function MessageBubble({ message, index = 0 }) {
         )}
 
         {/* Assistant action buttons: Copy, Thumbs Up, Thumbs Down */}
-        {!isUser && !message.pending && content && (
+        {!isUser && !message.pending && !message.streaming && content && (
           <div className="mt-2.5 flex items-center gap-1 border-t border-white/5 pt-1.5 text-xs text-slate-400">
             <button
               onClick={handleCopy}
@@ -78,8 +82,25 @@ export default function MessageBubble({ message, index = 0 }) {
               )}
             </button>
 
+            {ttsSupported && content && (
+              <button
+                onClick={() => (speaking ? stopSpeaking() : speak(content))}
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors ${
+                  speaking ? 'bg-violet-500/20 text-violet-300' : 'hover:bg-white/10 hover:text-white'
+                }`}
+                title={speaking ? 'Stop reading aloud' : 'Read answer aloud'}
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d={speaking
+                    ? 'M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z'
+                    : 'M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z'} />
+                </svg>
+                <span className="text-[11px]">{speaking ? 'Stop' : 'Listen'}</span>
+              </button>
+            )}
+
             <button
-              onClick={() => setFeedback(feedback === 'up' ? null : 'up')}
+              onClick={() => rateMessage(message.id, 'up')}
               className={`rounded-md p-1 transition-colors ${
                 feedback === 'up'
                   ? 'bg-emerald-500/20 text-emerald-300'
@@ -93,7 +114,7 @@ export default function MessageBubble({ message, index = 0 }) {
             </button>
 
             <button
-              onClick={() => setFeedback(feedback === 'down' ? null : 'down')}
+              onClick={() => rateMessage(message.id, 'down')}
               className={`rounded-md p-1 transition-colors ${
                 feedback === 'down'
                   ? 'bg-red-500/20 text-red-300'

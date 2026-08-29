@@ -2,6 +2,7 @@
 // Operates fully in memory for ephemeral cloud deployments
 
 const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
 const supabase = require('../config/supabaseClient');
 const embeddingService = require('./embeddingService');
 const ocrService = require('./ocrService');
@@ -19,6 +20,19 @@ async function extractPdfText(fileBuffer) {
     return data.text || '';
   } catch (error) {
     console.warn(`[PDF Parse] Standard extraction warning: ${error.message}`);
+    return '';
+  }
+}
+
+/**
+ * Extract text from DOCX buffer (paragraphs + tables)
+ */
+async function extractDocxText(fileBuffer) {
+  try {
+    const result = await mammoth.extractRawText({ buffer: fileBuffer });
+    return result.value || '';
+  } catch (error) {
+    console.warn('[DOCX Parse] Extraction warning: ' + error.message);
     return '';
   }
 }
@@ -82,9 +96,15 @@ async function uploadDocument(file, userId, collectionId = null) {
 
   const isImage = file.mimetype.startsWith('image/');
   const isPdf = file.mimetype === 'application/pdf';
+  const isDocx =
+    file.mimetype ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    file.originalname.toLowerCase().endsWith('.docx');
+  const isTxt =
+    file.mimetype === 'text/plain' || file.originalname.toLowerCase().endsWith('.txt');
 
-  if (!isImage && !isPdf) {
-    throw new Error('Supported file types: PDF, PNG, JPG, JPEG, and WEBP.');
+  if (!isImage && !isPdf && !isDocx && !isTxt) {
+    throw new Error('Supported file types: PDF, DOCX, TXT, PNG, JPG, JPEG, and WEBP.');
   }
 
   if (file.size > 30 * 1024 * 1024) {
@@ -96,6 +116,12 @@ async function uploadDocument(file, userId, collectionId = null) {
   if (isImage) {
     console.log(`[DocumentService] Processing image upload with OCR: ${file.originalname}`);
     extractedText = await ocrService.extractTextFromImage(file.buffer);
+  } else if (isDocx) {
+    console.log(`[DocumentService] Extracting text from DOCX: ${file.originalname}`);
+    extractedText = await extractDocxText(file.buffer);
+  } else if (isTxt) {
+    console.log(`[DocumentService] Reading TXT: ${file.originalname}`);
+    extractedText = file.buffer.toString('utf-8');
   } else if (isPdf) {
     console.log(`[DocumentService] Extracting text from PDF: ${file.originalname}`);
     extractedText = await extractPdfText(file.buffer);

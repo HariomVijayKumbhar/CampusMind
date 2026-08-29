@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import MessageBubble from '@/components/MessageBubble';
+import FileUploadModal from '@/components/FileUploadModal';
 import { useChatStore } from '@/store/chatStore';
+import { useSpeechInput } from '@/hooks/useSpeech';
 
 function TypingIndicator() {
   return (
@@ -82,14 +84,20 @@ export default function ChatWindow() {
   const hasMoreHistory = useChatStore((state) => state.hasMoreHistory);
   const loadHistory = useChatStore((state) => state.loadHistory);
   const loadOlderMessages = useChatStore((state) => state.loadOlderMessages);
-  const sendMessage = useChatStore((state) => state.sendMessage);
+  const sendMessage = useChatStore((state) => state.sendMessageStream);
   const clearError = useChatStore((state) => state.clearError);
+  const chatQuota = useChatStore((state) => state.chatQuota);
 
   const [input, setInput] = useState('');
+  const [uploadOpen, setUploadOpen] = useState(false);
   const bottomRef = useRef(null);
   const containerRef = useRef(null);
   const textareaRef = useRef(null);
   const previousScrollHeight = useRef(0);
+
+  const speech = useSpeechInput((transcript) => {
+    setInput(transcript);
+  });
 
   // Load chat history on initial mount
   useEffect(() => {
@@ -224,6 +232,20 @@ export default function ChatWindow() {
         style={{ background: 'rgba(22,22,34,0.9)', backdropFilter: 'blur(16px)' }}
       >
         <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl items-end gap-3">
+          {/* "+" upload button */}
+          <button
+            type="button"
+            onClick={() => setUploadOpen(true)}
+            disabled={sending}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400 transition-all duration-200 hover:border-violet-500/40 hover:text-white disabled:opacity-40"
+            aria-label="Upload a document"
+            title="Upload a document to the knowledge base"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+          </button>
+
           <div className="relative flex-1">
             <textarea
               ref={textareaRef}
@@ -241,6 +263,25 @@ export default function ChatWindow() {
               style={{ minHeight: '48px', maxHeight: '160px' }}
             />
           </div>
+
+          {speech.supported && (
+            <button
+              type="button"
+              onClick={() => (speech.listening ? speech.stop() : speech.start())}
+              disabled={sending}
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition-all duration-200 disabled:opacity-40 ${
+                speech.listening
+                  ? 'border-red-500/60 bg-red-500/20 text-red-300 animate-pulse'
+                  : 'border-white/10 bg-white/5 text-slate-400 hover:border-violet-500/40 hover:text-white'
+              }`}
+              aria-label={speech.listening ? 'Stop voice input' : 'Start voice input'}
+              title={speech.listening ? 'Stop voice input' : 'Speak your question'}
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+              </svg>
+            </button>
+          )}
 
           <button
             id="chat-send"
@@ -267,8 +308,22 @@ export default function ChatWindow() {
           </button>
         </form>
 
-        <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-slate-600">
-          Shift+Enter for new line · answers grounded in college documents
+        <FileUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+
+        <p className="mx-auto mt-2 max-w-3xl flex items-center justify-center gap-2 text-center text-xs text-slate-600">
+          <span>Shift+Enter for new line · answers grounded in college documents</span>
+          {chatQuota && (
+            <span
+              className={`rounded-full border px-2 py-0.5 font-semibold ${
+                chatQuota.remaining <= Math.ceil(chatQuota.limit * 0.2)
+                  ? 'border-red-500/40 text-red-300'
+                  : 'border-white/10 text-slate-500'
+              }`}
+              title="Messages remaining in the current rate-limit window"
+            >
+              {chatQuota.remaining}/{chatQuota.limit} left
+            </span>
+          )}
         </p>
       </div>
     </div>

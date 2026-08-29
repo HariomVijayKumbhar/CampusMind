@@ -61,7 +61,7 @@ async function saveMessage(userId, role, content, sources = [], userObj = null) 
 // chronological order. Pagination walks backward through older messages using
 // a strict `lt` cursor (the oldest created_at of the previous page) so the
 // cursor message itself is never re-fetched/duplicated.
-async function getHistory(userId, cursor = null, limit = PAGE_SIZE) {
+async function getHistory(userId, cursor = null, limit = PAGE_SIZE, conversationId = null) {
   try {
     if (!userId) {
       throw new Error('userId is required');
@@ -71,6 +71,7 @@ async function getHistory(userId, cursor = null, limit = PAGE_SIZE) {
       .from('chat_messages')
       .select('id, user_id, role, content, sources, created_at')
       .eq('user_id', userId)
+      .then((q) => (conversationId ? q.eq('conversation_id', conversationId) : q))
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
 

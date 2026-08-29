@@ -3,11 +3,13 @@ import Link from 'next/link';
 import Head from 'next/head';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import ChatWindow from '@/components/ChatWindow';
+import SessionsSidebar from '@/components/SessionsSidebar';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
 
 export default function Chat() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const menuRef = useRef(null);
   const profile = useAuthStore((state) => state.profile);
   const fetchProfile = useAuthStore((state) => state.fetchProfile);
@@ -85,6 +87,19 @@ export default function Chat() {
             borderBottom: '1px solid rgba(255,255,255,0.06)',
           }}
         >
+          {/* Left: hamburger + logo */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Toggle conversations sidebar"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+
           {/* Logo */}
           <Link href="/chat" className="flex items-center gap-2.5 group">
             <div
@@ -111,6 +126,27 @@ export default function Chat() {
                 <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd"/>
               </svg>
               <span>Upload Docs &amp; OCR</span>
+            </Link>
+
+            {/* Exam planner */}
+            <Link
+              href="/exams"
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5
+                         text-xs font-semibold text-emerald-300 transition-all hover:bg-emerald-500/20 hover:text-white"
+            >
+              <span>Exam Planner</span>
+            </Link>
+
+            {/* Study tools */}
+            <Link
+              href="/study"
+              className="flex items-center gap-1.5 rounded-xl border border-pink-500/30 bg-pink-500/10 px-3 py-1.5
+                         text-xs font-semibold text-pink-300 transition-all hover:bg-pink-500/20 hover:text-white"
+            >
+              <svg className="h-4 w-4 text-pink-400" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4z" />
+              </svg>
+              <span>Study Tools</span>
             </Link>
 
             {/* Export conversation button */}
@@ -193,9 +229,12 @@ export default function Chat() {
           </div>
         </header>
 
-        {/* Chat area */}
-        <div className="min-h-0 flex-1">
-          <ChatWindow />
+        {/* Chat area + sidebar */}
+        <div className="flex min-h-0 flex-1">
+          <SessionsSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <div className="min-w-0 flex-1">
+            <ChatWindow />
+          </div>
         </div>
       </div>
     </ProtectedRoute>

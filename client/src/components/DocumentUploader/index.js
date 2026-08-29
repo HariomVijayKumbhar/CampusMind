@@ -1,18 +1,20 @@
 import { useState, useRef } from 'react';
 
 const MAX_SIZE_BYTES = 30 * 1024 * 1024; // 30MB (must match server limit)
-const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp'];
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.png', '.jpg', '.jpeg', '.webp'];
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'image/png',
   'image/jpeg',
   'image/jpg',
   'image/webp',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
 ];
 
 /**
  * Multi-format Document & Image Uploader with OCR support.
- * Supports PDF, PNG, JPG, JPEG, WEBP.
+ * Supports PDF, DOCX, TXT, PNG, JPG, JPEG, WEBP.
  *
  * Props:
  * - onUpload(file): async handler that performs the upload
@@ -200,7 +202,7 @@ export default function DocumentUploader({ onUpload, uploading }) {
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
+          accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,application/pdf,image/*,text/plain"
           onChange={handleFileInput}
           disabled={uploading}
           className="hidden"

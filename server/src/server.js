@@ -10,6 +10,10 @@ const chatRoutes = require('./routes/chatRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const authRoutes = require('./routes/authRoutes');
 const collectionRoutes = require('./routes/collectionRoutes');
+const studyRoutes = require('./routes/studyRoutes');
+const feedbackRoutes = require('./routes/feedbackRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const examRoutes = require('./routes/examRoutes');
 
 const app = express();
 
@@ -77,6 +81,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/collections', collectionRoutes);
+app.use('/api/study', studyRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/exams', examRoutes);
 
 // Multer-specific errors -> 400
 app.use((err, req, res, next) => {
@@ -89,7 +97,7 @@ app.use((err, req, res, next) => {
   }
 
   if (err.message && err.message.includes('Only PDF')) {
-    return res.status(400).json({ error: 'Only PDF files are allowed' });
+    return res.status(400).json({ error: 'Only PDF, DOCX, TXT and image files are allowed' });
   }
 
   next(err);

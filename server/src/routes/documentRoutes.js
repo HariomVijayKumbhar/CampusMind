@@ -12,6 +12,8 @@ const ALLOWED_MIME_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/webp',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
 ];
 
 // Configure multer for memory storage (Render & cloud hosts have ephemeral filesystem)
@@ -22,7 +24,7 @@ const upload = multer({
     if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF and image files (PNG, JPG, JPEG, WEBP) are allowed.'));
+      cb(new Error('Only PDF, DOCX, TXT and image files (PNG, JPG, JPEG, WEBP) are allowed.'));
     }
   },
 });

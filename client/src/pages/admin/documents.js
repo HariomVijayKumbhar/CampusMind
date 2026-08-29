@@ -120,6 +120,12 @@ export default function Documents() {
               <p className="mt-1 text-sm text-slate-400">Upload PDF documents to train your RAG college assistant</p>
             </div>
             <Link
+              href="/admin/usage"
+              className="inline-flex items-center gap-2 rounded-xl border border-pink-500/30 bg-pink-500/10 px-4 py-2.5 text-sm font-semibold text-pink-300 transition-all hover:bg-pink-500/20 hover:text-white self-start sm:self-auto"
+            >
+              📊 Usage Analytics
+            </Link>
+            <Link
               href="/chat"
               className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition-all hover:border-violet-500/40 hover:bg-white/10 hover:text-white self-start sm:self-auto"
             >
