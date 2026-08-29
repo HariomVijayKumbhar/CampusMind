@@ -36,8 +36,7 @@ export default function SessionsSidebar({ open, onClose }) {
       <div className="fixed inset-0 z-20 bg-black/50 lg:hidden" onClick={onClose} />
 
       <aside
-        className="fixed inset-y-0 left-0 z-30 flex w-72 flex-col border-r border-white/10 lg:static lg:z-0"
-        style={{ background: 'rgba(18,18,28,0.98)', backdropFilter: 'blur(16px)' }}
+        className="fixed inset-y-0 left-0 z-30 flex w-72 flex-col sidebar-surface lg:static lg:z-0"
       >
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <h2 className="text-sm font-semibold text-white">Conversations</h2>
@@ -52,8 +51,7 @@ export default function SessionsSidebar({ open, onClose }) {
         <div className="p-3">
           <button
             onClick={() => { selectConversation(null); onClose(); }}
-            className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white transition-opacity"
-            style={{ background: 'linear-gradient(135deg, rgb(139,92,246), rgb(124,58,237))' }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/10"
           >
             <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -66,7 +64,7 @@ export default function SessionsSidebar({ open, onClose }) {
         <div className="flex-1 overflow-y-auto px-2 pb-4">
           {conversations.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-slate-500">
-              No conversations yet. Start chatting and they&apos;ll appear here.
+              No conversations yet.
             </p>
           ) : (
             <ul className="space-y-1">
@@ -82,13 +80,13 @@ export default function SessionsSidebar({ open, onClose }) {
                         if (e.key === 'Enter') commitRename();
                         if (e.key === 'Escape') setRenamingId(null);
                       }}
-                      className="w-full rounded-xl border border-violet-500/50 bg-white/10 px-3 py-2 text-sm text-white outline-none"
+                      className="w-full rounded-lg border border-violet-500/50 bg-white/10 px-3 py-2 text-sm text-white outline-none"
                     />
                   ) : (
                     <button
                       onClick={() => { selectConversation(conv.id); onClose(); }}
                       className={`w-full rounded-xl px-3 py-2.5 pr-14 text-left text-sm transition-colors ${activeId === conv.id
-                        ? 'bg-violet-500/20 text-white'
+                        ? 'bg-white/10 text-white'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white'
                         }`}
                     >

@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDocumentStore } from '@/store/documentStore';
 
-/**
- * ChatGPT-style "+" upload modal: pick a file, optionally choose a
- * collection (department), upload it straight into the knowledge base
- * without leaving the chat.
- */
-export default function FileUploadModal({ open, onClose }) {
+const MAX_SIZE_BYTES = 30 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.png', '.jpg', '.jpeg', '.webp'];
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+];
+
+export default function FileUploadModal({ open, onClose, onFileSelect }) {
   const {
     collections,
     fetchCollections,
@@ -33,7 +40,6 @@ export default function FileUploadModal({ open, onClose }) {
     }
   }, [open, fetchCollections, clearError, clearSuccess]);
 
-  // Close on Escape
   useEffect(() => {
     if (!open) return;
     const handler = (e) => e.key === 'Escape' && onClose();
@@ -46,7 +52,19 @@ export default function FileUploadModal({ open, onClose }) {
   const pickFile = (file) => {
     clearError();
     clearSuccess();
-    setSelectedFile(file || null);
+    if (!file) return;
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    const isValidType = ALLOWED_MIME_TYPES.includes(file.type) || ALLOWED_EXTENSIONS.includes(ext);
+    if (!isValidType) {
+      alert('Supported formats: PDF, DOCX, TXT, PNG, JPG, JPEG, WEBP');
+      return;
+    }
+    if (file.size > MAX_SIZE_BYTES) {
+      alert('File size must be less than 30 MB.');
+      return;
+    }
+    setSelectedFile(file);
+    if (onFileSelect) onFileSelect(file);
   };
 
   const handleUpload = async () => {
@@ -71,17 +89,10 @@ export default function FileUploadModal({ open, onClose }) {
       }}
     >
       <div
-        className="w-full max-w-md rounded-3xl border-white/10 p-6 shadow-2xl animate-slide-up"
-        style={{ background: 'rgba(22,22,34,0.98)' }}
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#16161E] p-5 shadow-2xl animate-slide-up"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-white">
-            <svg className="h-5 w-5 text-violet-400" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M15.5 2A1.5 1.5 0 0013.05 3.05l-8.9 8.9a3.5 3.5 0 00-.86 1.53L2.6 16.4a.6.6 0 00.75.75l2.92-.69a3.5 3.5 0 001.53-.86l8.9-8.9A1.5 1.5 0 0015.5 2z" />
-              <path d="M2 17.5A.75.75 0 012.75 17h5.5a.75.75 0 010 1.5h-5.5a.75.75 0 01-.75-.75z" />
-            </svg>
-            Upload a document
-          </h2>
+          <h2 className="text-sm font-semibold text-white">Upload document</h2>
           <button
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
@@ -93,7 +104,6 @@ export default function FileUploadModal({ open, onClose }) {
           </button>
         </div>
 
-        {/* Drop zone */}
         <div
           onClick={() => inputRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -103,45 +113,43 @@ export default function FileUploadModal({ open, onClose }) {
             setDragOver(false);
             pickFile(e.dataTransfer.files?.[0]);
           }}
-          className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-colors
-            ${dragOver ? 'border-violet-400 bg-violet-500/10' : 'border-white/15 bg-white/5 hover:border-violet-500/50'}`}
+          className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-6 py-8 text-center transition-colors
+            ${dragOver ? 'border-violet-400 bg-violet-500/10' : 'border-white/15 bg-white/5 hover:border-white/25'}`}
         >
-          <svg className="mb-2 h-8 w-8 text-violet-400" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z" />
-            <path d="M9 13h2v5a1 1 0 11-2 0v-5z" />
+          <svg className="mb-2 h-7 w-7 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
           </svg>
           {selectedFile ? (
             <>
-              <p className="text-sm font-semibold text-white truncate max-w-[260px]">{selectedFile.name}</p>
+              <p className="text-sm font-medium text-white truncate max-w-[260px]">{selectedFile.name}</p>
               <p className="mt-0.5 text-xs text-slate-500">
-                {(selectedFile.size / 1024).toFixed(0)} KB — click to choose a different file
+                {(selectedFile.size / 1024).toFixed(0)} KB — click to change
               </p>
             </>
           ) : (
             <>
-              <p className="text-sm font-medium text-slate-300">Click to browse or drop a file here</p>
-              <p className="mt-0.5 text-xs text-slate-500">PDF, DOCX, TXT, images (OCR supported)</p>
+              <p className="text-sm font-medium text-slate-300">Click to browse or drop a file</p>
+              <p className="mt-0.5 text-xs text-slate-500">PDF, DOCX, TXT, images up to 30 MB</p>
             </>
           )}
           <input
             ref={inputRef}
             type="file"
             className="hidden"
-            accept=".pdf,.doc,.docx,.txt,.md,.png,.jpg,.jpeg"
+            accept=".pdf,.doc,.docx,.txt,.md,.png,.jpg,.jpeg,.webp"
             onChange={(e) => pickFile(e.target.files?.[0])}
           />
         </div>
 
-        {/* Collection picker */}
         {collections.length > 0 && (
           <label className="mt-4 block">
-            <span className="mb-1.5 block text-xs font-semibold text-slate-400">
+            <span className="mb-1.5 block text-xs font-medium text-slate-400">
               Add to collection (optional)
             </span>
             <select
               value={collectionId}
               onChange={(e) => setCollectionId(e.target.value)}
-              className="w-full rounded-xl border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50"
             >
               <option value="">General knowledge base</option>
               {collections.map((c) => (
@@ -151,7 +159,6 @@ export default function FileUploadModal({ open, onClose }) {
           </label>
         )}
 
-        {/* Banners */}
         {error && (
           <div className="cm-banner-error mt-4">
             <span>{error}</span>
@@ -163,31 +170,19 @@ export default function FileUploadModal({ open, onClose }) {
           </div>
         )}
 
-        {/* Actions */}
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded-xl border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
           >
             Cancel
           </button>
           <button
             onClick={handleUpload}
             disabled={!selectedFile || uploading}
-            className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all disabled:opacity-40"
-            style={{ background: 'linear-gradient(135deg, rgb(139,92,246), rgb(124,58,237))' }}
+            className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-violet-500 disabled:opacity-40"
           >
-            {uploading ? (
-              <span className="flex items-center gap-2">
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Uploading…
-              </span>
-            ) : (
-              'Upload & Index'
-            )}
+            {uploading ? 'Uploading…' : 'Upload & Index'}
           </button>
         </div>
       </div>

@@ -198,3 +198,29 @@
   border-color: rgba(139, 92, 246, 0.6) !important;
   background: rgba(139, 92, 246, 0.08) !important;
 }
+
+/* ─── ChatGPT-style chat surfaces ──────────────────────────────── */
+.chat-surface {
+  background: rgb(var(--color-surface));
+}
+.chat-bubble-user {
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.chat-bubble-assistant {
+  background: transparent;
+}
+.chat-input-surface {
+  background: rgba(22,22,34,0.9);
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.attachment-chip {
+  @apply inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-300;
+}
+.attachment-chip button {
+  @apply text-slate-500 hover:text-white transition-colors;
+}
+.sidebar-surface {
+  background: rgba(18,18,28,0.98);
+  border-right: 1px solid rgba(255,255,255,0.06);
+}

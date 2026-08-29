@@ -7,11 +7,9 @@ import { useSpeechInput } from '@/hooks/useSpeech';
 function TypingIndicator() {
   return (
     <div className="flex w-full justify-start animate-slide-up">
-      <div className="flex items-center gap-2 rounded-2xl px-4 py-3 bubble-assistant">
-        {/* Robot icon */}
-        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
-             style={{ background: 'linear-gradient(135deg, rgb(139,92,246), rgb(236,72,153))' }}>
-          <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="currentColor">
+      <div className="flex items-center gap-3 rounded-2xl px-4 py-3 chat-bubble-assistant">
+        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-500/20">
+          <svg className="h-3 w-3 text-violet-400" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h3a3 3 0 013 3v9a3 3 0 01-3 3H8a3 3 0 01-3-3v-9a3 3 0 013-3h3V5.73A2 2 0 0112 2zm-3 9a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zm-3 4a3 3 0 01-2.83-2H9a3 3 0 005.66 0h-.83A3 3 0 0112 15z"/>
           </svg>
         </div>
@@ -19,7 +17,7 @@ function TypingIndicator() {
           {[0, 150, 300].map((delay) => (
             <span
               key={delay}
-              className="h-2 w-2 rounded-full bg-violet-400"
+              className="h-2 w-2 rounded-full bg-violet-400/80"
               style={{ animation: `bounceDot 1.2s ease-in-out ${delay}ms infinite` }}
             />
           ))}
@@ -36,27 +34,20 @@ function EmptyState() {
     'What courses are available in CS?',
     'What are the exam schedules?',
   ];
-  const sendMessage = useChatStore((state) => state.sendMessage);
+  const sendMessage = useChatStore((state) => state.sendMessageStream);
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center animate-fade-in">
-      <div
-        className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl"
-        style={{
-          background: 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(236,72,153,0.1))',
-          boxShadow: '0 0 40px rgba(139,92,246,0.2)',
-          border: '1px solid rgba(139,92,246,0.25)',
-        }}
-      >
-        <svg className="h-10 w-10 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-500/10 border border-violet-500/20">
+        <svg className="h-8 w-8 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z"/>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/>
         </svg>
       </div>
 
-      <h2 className="mb-2 text-2xl font-bold text-white">Ask CampusMind</h2>
+      <h2 className="mb-2 text-xl font-semibold text-white">CampusMind</h2>
       <p className="mb-8 max-w-sm text-sm leading-relaxed text-slate-400">
-        Get instant answers about admissions, courses, fees, exams, hostels, and more — powered by your college&apos;s official documents.
+        Ask me anything about admissions, courses, fees, exams, hostels, and campus life.
       </p>
 
       <div className="grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
@@ -90,16 +81,17 @@ export default function ChatWindow() {
 
   const [input, setInput] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [attachments, setAttachments] = useState([]);
   const bottomRef = useRef(null);
   const containerRef = useRef(null);
   const textareaRef = useRef(null);
   const previousScrollHeight = useRef(0);
+  const fileInputRef = useRef(null);
 
   const speech = useSpeechInput((transcript) => {
     setInput(transcript);
   });
 
-  // Load chat history on initial mount
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
@@ -160,11 +152,17 @@ export default function ChatWindow() {
     }
   };
 
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    setAttachments((prev) => [...prev, file]);
+  };
+
+  const removeAttachment = (index) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
   return (
-    <div
-      className="flex h-full min-h-0 flex-col"
-      style={{ background: 'rgb(15,15,23)' }}
-    >
+    <div className="flex h-full min-h-0 flex-col chat-surface">
       {/* Message list */}
       <div ref={containerRef} className="flex-1 overflow-y-auto">
         {loadingHistory ? (
@@ -227,104 +225,98 @@ export default function ChatWindow() {
       )}
 
       {/* Input bar */}
-      <div
-        className="border-t border-white/10 px-4 py-4"
-        style={{ background: 'rgba(22,22,34,0.9)', backdropFilter: 'blur(16px)' }}
-      >
-        <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl items-end gap-3">
-          {/* "+" upload button */}
-          <button
-            type="button"
-            onClick={() => setUploadOpen(true)}
-            disabled={sending}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400 transition-all duration-200 hover:border-violet-500/40 hover:text-white disabled:opacity-40"
-            aria-label="Upload a document"
-            title="Upload a document to the knowledge base"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-          </button>
+      <div className="chat-input-surface px-4 py-4">
+        <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl flex-col gap-2">
+          {/* Attachment previews */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {attachments.map((file, idx) => (
+                <span key={idx} className="attachment-chip">
+                  <svg className="h-3.5 w-3.5 text-violet-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd"/>
+                  </svg>
+                  <span className="max-w-[120px] truncate">{file.name}</span>
+                  <button type="button" onClick={() => removeAttachment(idx)}>
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                    </svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
 
-          <div className="relative flex-1">
-            <textarea
-              ref={textareaRef}
-              id="chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask anything about your college..."
-              rows={1}
-              disabled={sending}
-              className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-4 text-sm text-white placeholder-slate-500
-                         outline-none transition-all duration-200
-                         focus:border-violet-500/50 focus:bg-white/10 focus:ring-2 focus:ring-violet-500/20
-                         disabled:opacity-50"
-              style={{ minHeight: '48px', maxHeight: '160px' }}
-            />
-          </div>
-
-          {speech.supported && (
+          <div className="flex items-end gap-2">
+            {/* "+" upload button */}
             <button
               type="button"
-              onClick={() => (speech.listening ? speech.stop() : speech.start())}
+              onClick={() => setUploadOpen(true)}
               disabled={sending}
-              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition-all duration-200 disabled:opacity-40 ${
-                speech.listening
-                  ? 'border-red-500/60 bg-red-500/20 text-red-300 animate-pulse'
-                  : 'border-white/10 bg-white/5 text-slate-400 hover:border-violet-500/40 hover:text-white'
-              }`}
-              aria-label={speech.listening ? 'Stop voice input' : 'Start voice input'}
-              title={speech.listening ? 'Stop voice input' : 'Speak your question'}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-400 transition-all duration-200 hover:border-violet-500/40 hover:text-white disabled:opacity-40"
+              aria-label="Attach a file"
+              title="Attach a file"
             >
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
               </svg>
             </button>
-          )}
 
-          <button
-            id="chat-send"
-            type="submit"
-            disabled={sending || !input.trim()}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-all duration-200
-                       disabled:cursor-not-allowed disabled:opacity-40"
-            style={{
-              background: 'linear-gradient(135deg, rgb(139,92,246), rgb(124,58,237))',
-              boxShadow: input.trim() && !sending ? '0 4px 20px rgba(139,92,246,0.4)' : 'none',
-            }}
-            aria-label="Send message"
-          >
-            {sending ? (
-              <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-              </svg>
-            ) : (
-              <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
-              </svg>
+            <div className="relative flex-1">
+              <textarea
+                ref={textareaRef}
+                id="chat-input"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Message CampusMind..."
+                rows={1}
+                disabled={sending}
+                className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-4 text-sm text-white placeholder-slate-500
+                           outline-none transition-all duration-200
+                           focus:border-violet-500/50 focus:bg-white/10 focus:ring-2 focus:ring-violet-500/20
+                           disabled:opacity-50"
+                style={{ minHeight: '48px', maxHeight: '160px' }}
+              />
+            </div>
+
+            <button
+              id="chat-send"
+              type="submit"
+              disabled={sending || !input.trim()}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white transition-all duration-200 hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Send message"
+            >
+              {sending ? (
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
+                </svg>
+              )}
+            </button>
+          </div>
+
+          <p className="mx-auto mt-2 flex items-center justify-center gap-2 text-center text-xs text-slate-600">
+            <span>Shift+Enter for new line</span>
+            {chatQuota && (
+              <span
+                className={`rounded-full border px-2 py-0.5 font-semibold ${
+                  chatQuota.remaining <= Math.ceil(chatQuota.limit * 0.2)
+                    ? 'border-red-500/40 text-red-300'
+                    : 'border-white/10 text-slate-500'
+                }`}
+                title="Messages remaining in the current rate-limit window"
+              >
+                {chatQuota.remaining}/{chatQuota.limit} left
+              </span>
             )}
-          </button>
+          </p>
         </form>
 
-        <FileUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
-
-        <p className="mx-auto mt-2 max-w-3xl flex items-center justify-center gap-2 text-center text-xs text-slate-600">
-          <span>Shift+Enter for new line · answers grounded in college documents</span>
-          {chatQuota && (
-            <span
-              className={`rounded-full border px-2 py-0.5 font-semibold ${
-                chatQuota.remaining <= Math.ceil(chatQuota.limit * 0.2)
-                  ? 'border-red-500/40 text-red-300'
-                  : 'border-white/10 text-slate-500'
-              }`}
-              title="Messages remaining in the current rate-limit window"
-            >
-              {chatQuota.remaining}/{chatQuota.limit} left
-            </span>
-          )}
-        </p>
+        <FileUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onFileSelect={handleFileSelect} />
       </div>
     </div>
   );
