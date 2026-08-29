@@ -68,21 +68,24 @@ export const useAuthStore = create((set, get) => ({
 
   signup: async (email, password, fullName) => {
     try {
-      if (!isSupabaseConfigured()) {
-        return { success: false, error: SUPABASE_NOT_CONFIGURED_ERROR };
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/auth/signup`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, fullName }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Signup failed');
       }
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } },
-      });
-
-      if (error) throw error;
-
-      set({ session: data.session, user: data.user });
-      if (typeof window !== 'undefined' && data.session) {
-        localStorage.setItem('authSession', JSON.stringify(data.session));
+      const { session, user } = await response.json();
+      set({ session, user });
+      if (typeof window !== 'undefined' && session) {
+        localStorage.setItem('authSession', JSON.stringify(session));
       }
 
       return { success: true };
@@ -102,7 +105,13 @@ export const useAuthStore = create((set, get) => ({
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        const message = error.message || 'Login failed';
+        if (message.includes('Email not confirmed') || message.includes('not confirmed')) {
+          throw new Error('Please confirm your email address before logging in. Check your inbox for the confirmation link, or contact support if you did not receive it.');
+        }
+        throw error;
+      }
 
       set({ session: data.session, user: data.user });
       if (typeof window !== 'undefined' && data.session) {

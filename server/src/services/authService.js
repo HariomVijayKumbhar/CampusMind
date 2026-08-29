@@ -64,6 +64,36 @@ async function getProfile(user) {
   }
 }
 
+/**
+ * Create a new user via the service-role client so the account is
+ * immediately confirmed and can log in without email confirmation.
+ */
+async function signup(email, password, fullName) {
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+  });
+
+  if (error) throw error;
+
+  // Ensure the public profiles row exists
+  await getProfile(data.user);
+
+  // Immediately sign the user in so we can return a session to the frontend
+  const { data: sessionData, error: signInError } =
+    await supabase.auth.signInWithPassword({ email, password });
+
+  if (signInError) throw signInError;
+
+  return {
+    user: sessionData.user,
+    session: sessionData.session,
+  };
+}
+
 module.exports = {
   getProfile,
+  signup,
 };

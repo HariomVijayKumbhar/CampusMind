@@ -21,4 +21,20 @@ router.get('/profile', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/auth/signup - Create a new user (admin-confirmed via service role)
+router.post('/signup', async (req, res) => {
+  try {
+    const { email, password, fullName } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const result = await authService.signup(email, password, fullName);
+    res.json({ user: result.user, session: result.session });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(400).json({ error: error.message || 'Signup failed' });
+  }
+});
+
 module.exports = router;
