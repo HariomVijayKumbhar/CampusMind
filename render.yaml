@@ -1,0 +1,26 @@
+# Render Blueprint - deploys the CampusMind backend (Express API)
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: campusmind-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        sync: false        # set to your Vercel URL, e.g. https://campusmind.vercel.app
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false        # optional, defaults to qwen/qwen3.8-27b
