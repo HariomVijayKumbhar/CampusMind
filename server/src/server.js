@@ -34,15 +34,21 @@ const allowedOrigins = [
   ...configuredOrigins,
 ];
 
+// Normalize for comparison: strip protocol so `https://example.com`
+// matches an env var value like `example.com`.
+const stripProtocol = (url) => url.replace(/^https?:\/\//, '');
+const normalizedAllowed = allowedOrigins.map(stripProtocol);
+
 app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
 
-      // In development or local environments, allow any localhost/127.0.0.1 port
+      const normalizedOrigin = stripProtocol(origin);
+
       if (
         /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
-        allowedOrigins.includes(origin)
+        normalizedAllowed.includes(normalizedOrigin)
       ) {
         return callback(null, true);
       }
