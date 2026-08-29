@@ -2,6 +2,9 @@
 -- Adds the generated tsvector column + GIN index (spec Section 15) and
 -- a keyword_search_chunks RPC used by the keyword stage of hybridRetrieve().
 
+alter table documents
+  add column if not exists collection_id uuid references collections(id);
+
 alter table document_chunks
   add column if not exists content_tsv tsvector
   generated always as (to_tsvector('english', content)) stored;

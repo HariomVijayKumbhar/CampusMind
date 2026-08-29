@@ -3,7 +3,12 @@
 -- three arguments resolve to this new overload and collection scoping works.
 -- retrievalService.semanticSearch() always passes (embedding, match_count, filter_collection).
 
+alter table documents
+  add column if not exists collection_id uuid references collections(id);
+
+drop function if exists public.match_document_chunks(vector);
 drop function if exists public.match_document_chunks(vector, integer);
+drop function if exists public.match_document_chunks(vector, integer, uuid);
 
 create or replace function public.match_document_chunks(
   query_embedding vector(384),

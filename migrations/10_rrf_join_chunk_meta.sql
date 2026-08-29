@@ -3,6 +3,9 @@
 -- this SQL function only performs the Postgres-side join that the RPC returns
 -- are too narrow for (they lack collection_id and document_id_for_join).
 
+alter table documents
+  add column if not exists collection_id uuid references collections(id);
+
 create or replace function public.join_chunk_meta(
   chunk_ids uuid[]
 )
