@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '@/services/api';
+import Flashcard from '@/components/Flashcard';
+import { useStudyStore } from '@/store/studyStore';
 
 const TABS = [
   { id: 'quiz', label: 'Quiz Me' },
   { id: 'flashcards', label: 'Flashcards' },
+  { id: 'review', label: 'Review' },
   { id: 'summary', label: 'Summary' },
 ];
 
@@ -24,6 +27,25 @@ export default function StudyPage() {
   const [flashcards, setFlashcards] = useState(null);
   const [flipped, setFlipped] = useState({});
   const [summary, setSummary] = useState('');
+
+  const {
+    progress,
+    recommendations,
+    dueFlashcards,
+    fetchProgress,
+    fetchRecommendations,
+    fetchDueFlashcards,
+    reviewFlashcard,
+    deleteFlashcard,
+  } = useStudyStore();
+
+  useEffect(() => {
+    if (tab === 'review') {
+      fetchProgress();
+      fetchRecommendations();
+      fetchDueFlashcards();
+    }
+  }, [tab, fetchProgress, fetchRecommendations, fetchDueFlashcards]);
 
   const run = async (fn) => {
     setLoading(true);
@@ -112,6 +134,72 @@ export default function StudyPage() {
             </button>
           ))}
         </div>
+
+        {progress && (
+          <div className="mt-6 grid gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">Messages (30d)</p>
+              <p className="mt-1 text-xl font-bold text-white">{progress.messages}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">Due flashcards</p>
+              <p className="mt-1 text-xl font-bold text-violet-400">{progress.flashcards?.due || 0}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">Mastery</p>
+              <p className="mt-1 text-xl font-bold text-emerald-400">
+                {progress.sessions?.mastery != null
+                  ? `${Math.round(progress.sessions.mastery * 100)}%`
+                  : '—'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500">Helpful ratio</p>
+              <p className="mt-1 text-xl font-bold text-amber-400">
+                {progress.feedback?.ratio != null
+                  ? `${Math.round(progress.feedback.ratio * 100)}%`
+                  : '—'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {tab === 'review' && (
+          <div className="mt-6 space-y-6">
+            {recommendations?.weak_areas?.length > 0 && (
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <p className="text-xs font-semibold text-amber-300">⚠️ Topics you struggled with</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {recommendations.weak_areas.map((t, i) => (
+                    <span key={i} className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">
+                      {t.topic} {t.count ? `(${t.count})` : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h2 className="mb-3 text-sm font-semibold text-white">Due flashcards ({dueFlashcards.length})</h2>
+              {dueFlashcards.length === 0 ? (
+                <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
+                  No flashcards due. Save Q&amp;A pairs from the chat to start building your deck.
+                </p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {dueFlashcards.map((card) => (
+                    <Flashcard
+                      key={card.id}
+                      card={card}
+                      onReview={reviewFlashcard}
+                      onDelete={deleteFlashcard}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {tab === 'quiz' && inputBar(generateQuiz, 'Generate Quiz')}
         {tab === 'flashcards' && inputBar(generateFlashcards, 'Generate Flashcards')}

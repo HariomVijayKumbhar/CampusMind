@@ -58,4 +58,8 @@ module.exports = {
   rag: {
     conversationHistoryLimit: 10,
   },
+  features: {
+    learning: process.env.LEARNING_ENABLED !== 'false',
+    collab: process.env.COLLAB_ENABLED !== 'false',
+  },
 };

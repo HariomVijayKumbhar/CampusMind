@@ -11,6 +11,7 @@ const supabase = require('../config/supabaseClient');
 const embeddingService = require('./embeddingService');
 const ocrService = require('./ocrService');
 const ragConfig = require('../config/rag');
+const documentIntelligenceService = require('./documentIntelligenceService');
 const RecursiveCharacterTextSplitter = require('../utils/textSplitter');
 
 const textSplitter = new RecursiveCharacterTextSplitter();
@@ -222,6 +223,9 @@ async function processDocument(documentId, file, fileBuffer) {
 
     const chunkCount = await generateAndStoreChunks(documentId, chunks);
 
+    // Phase 2: Document Intelligence — best-effort, never blocks ingestion.
+    await runDocumentIntelligence(documentId, extractedText, file, fileBuffer, chunks);
+
     await updateDocumentStatus(documentId, 'ready');
 
     console.log(
@@ -292,25 +296,54 @@ async function listDocuments(collectionId = null) {
       throw new Error(`Failed to list documents: ${docsError.message}`);
     }
 
-    const { data: chunkCounts, error: countsError } = await supabase
-      .from('document_chunks')
-      .select('document_id, id');
+  const { data: chunkCounts, error: countsError } = await supabase
+    .from('document_chunks')
+    .select('document_id, id');
 
-    if (countsError) {
-      throw new Error(`Failed to get chunk counts: ${countsError.message}`);
+  if (countsError) {
+    throw new Error(`Failed to get chunk counts: ${countsError.message}`);
+  }
+
+  const counts = {};
+  (chunkCounts || []).forEach((chunk) => {
+    counts[chunk.document_id] = (counts[chunk.document_id] || 0) + 1;
+  });
+
+  // Phase 2: pull light metadata (table count + page count) for the admin list.
+  const docIds = (documents || []).map((d) => d.id);
+  const intelligenceByDoc = {};
+  if (docIds.length > 0) {
+    try {
+      const [tablesRes, metaRes] = await Promise.all([
+        supabase.from('document_tables').select('document_id, id').in('document_id', docIds),
+        supabase.from('document_metadata').select('document_id, page_count, has_ocr').in('document_id', docIds),
+      ]);
+      (tablesRes.data || []).forEach((t) => {
+        intelligenceByDoc[t.document_id] = intelligenceByDoc[t.document_id] || {};
+        intelligenceByDoc[t.document_id].table_count =
+          (intelligenceByDoc[t.document_id].table_count || 0) + 1;
+      });
+      (metaRes.data || []).forEach((m) => {
+        intelligenceByDoc[m.document_id] = {
+          ...(intelligenceByDoc[m.document_id] || {}),
+          page_count: m.page_count,
+          has_ocr: m.has_ocr,
+        };
+      });
+    } catch (err) {
+      console.warn('[DocumentService] intelligence lookup skipped:', err.message);
     }
+  }
 
-    const counts = {};
-    (chunkCounts || []).forEach((chunk) => {
-      counts[chunk.document_id] = (counts[chunk.document_id] || 0) + 1;
-    });
+  const docsWithCounts = (documents || []).map((doc) => ({
+    ...doc,
+    chunk_count: counts[doc.id] || 0,
+    table_count: intelligenceByDoc[doc.id]?.table_count || 0,
+    page_count: intelligenceByDoc[doc.id]?.page_count || null,
+    has_ocr: intelligenceByDoc[doc.id]?.has_ocr || false,
+  }));
 
-    const docsWithCounts = (documents || []).map((doc) => ({
-      ...doc,
-      chunk_count: counts[doc.id] || 0,
-    }));
-
-    return docsWithCounts;
+  return docsWithCounts;
   } catch (error) {
     console.error('List error:', error);
     throw error;
@@ -342,6 +375,40 @@ async function getDocument(documentId) {
     ...document,
     chunk_count: chunkCount,
   };
+}
+
+async function runDocumentIntelligence(documentId, extractedText, file, fileBuffer, chunks) {
+  if (!ragConfig.di) return;
+  try {
+    const isPdf = file.mimetype === 'application/pdf';
+    const isImage = file.mimetype?.startsWith?.('image/');
+
+    if (ragConfig.di.enableMetadataExtraction && isPdf) {
+      const metadata = await documentIntelligenceService.extractPdfMetadata(fileBuffer);
+      await documentIntelligenceService.storeMetadata(documentId, metadata, isImage);
+    }
+
+    if (ragConfig.di.enableTableExtraction && extractedText && extractedText.length > 200) {
+      const tables = await documentIntelligenceService.extractTables(extractedText);
+      if (tables.length > 0) {
+        await documentIntelligenceService.storeTables(documentId, tables);
+      }
+    }
+
+    if (ragConfig.di.enableKeyPoints && Array.isArray(chunks)) {
+      // Generate key points for the first ~3 chunks only to keep cost down.
+      const sample = chunks.slice(0, 3);
+      for (const chunk of sample) {
+        if (!chunk || chunk.length < 200) continue;
+        const points = await documentIntelligenceService.generateKeyPoints(chunk);
+        if (points.length > 0) {
+          await documentIntelligenceService.storeKeyPoints(documentId, null, points);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[DocumentService] intelligence step failed for ${documentId}:`, err.message);
+  }
 }
 
 module.exports = {

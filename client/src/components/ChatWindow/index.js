@@ -78,6 +78,8 @@ export default function ChatWindow() {
   const sendMessage = useChatStore((state) => state.sendMessageStream);
   const clearError = useChatStore((state) => state.clearError);
   const chatQuota = useChatStore((state) => state.chatQuota);
+  const agentMode = useChatStore((state) => state.agentMode);
+  const setAgentMode = useChatStore((state) => state.setAgentMode);
 
   const [input, setInput] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -278,6 +280,23 @@ export default function ChatWindow() {
                 style={{ minHeight: '48px', maxHeight: '160px' }}
               />
             </div>
+
+            <button
+              type="button"
+              onClick={() => setAgentMode(!agentMode)}
+              className={`flex h-10 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all duration-200 ${
+                agentMode
+                  ? 'border-violet-500/60 bg-violet-500/20 text-violet-200'
+                  : 'border-white/10 bg-white/5 text-slate-400 hover:border-violet-500/40 hover:text-white'
+              }`}
+              title="Agent mode: multi-step research with tool calls"
+              aria-pressed={agentMode}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/>
+              </svg>
+              Agent
+            </button>
 
             <button
               id="chat-send"

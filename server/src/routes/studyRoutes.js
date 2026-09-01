@@ -38,4 +38,27 @@ router.post(
   (req, res) => { if (validate(req, res)) studyController.summarize(req, res); }
 );
 
+// --- Phase 3: Personalized Learning Engine --------------------------------
+
+router.get('/progress', requireAuth, studyController.getProgress);
+
+router.post(
+  '/flashcards/save',
+  requireAuth,
+  body('question').isString().trim().notEmpty().withMessage('Question is required'),
+  body('answer').isString().trim().notEmpty().withMessage('Answer is required'),
+  (req, res) => { if (validate(req, res)) studyController.saveFlashcard(req, res); }
+);
+
+router.get('/flashcards/due', requireAuth, studyController.listFlashcards);
+router.delete('/flashcards/:id', requireAuth, studyController.deleteFlashcard);
+router.post(
+  '/flashcards/:id/review',
+  requireAuth,
+  body('quality').isInt({ min: 0, max: 5 }).withMessage('quality must be 0-5'),
+  (req, res) => { if (validate(req, res)) studyController.reviewFlashcard(req, res); }
+);
+
+router.get('/recommendations', requireAuth, studyController.getRecommendations);
+
 module.exports = router;

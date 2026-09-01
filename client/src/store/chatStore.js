@@ -30,6 +30,8 @@ export const useChatStore = create((set, get) => ({
   conversations: [],
   activeConversationId: null,
   chatQuota: null, // { remaining, limit, reset }
+  agentMode: false,
+  setAgentMode: (agentMode) => set({ agentMode }),
 
   clearError: () => set({ error: '' }),
 
@@ -177,6 +179,7 @@ export const useChatStore = create((set, get) => ({
         message: trimmed,
         collection_id: collectionId || null,
         conversation_id: get().activeConversationId,
+        agentic: !!get().agentMode,
       });
       if (response.data?.conversation_id) set({ activeConversationId: response.data.conversation_id });
       updateQuotaFromHeaders(set, response.headers);
@@ -225,6 +228,7 @@ export const useChatStore = create((set, get) => ({
     tempIdCounter += 1;
     const uid = tempIdCounter;
     const assistantId = `stream-assistant-${uid}`;
+    const agentic = !!get().agentMode;
 
     set((state) => ({
       messages: [
@@ -243,6 +247,7 @@ export const useChatStore = create((set, get) => ({
           sources: [],
           created_at: new Date().toISOString(),
           streaming: true,
+          agentEvents: agentic ? [] : undefined,
         },
       ],
       sending: true,
@@ -270,6 +275,7 @@ export const useChatStore = create((set, get) => ({
             message: trimmed,
             collection_id: collectionId,
             conversation_id: get().activeConversationId,
+            agentic,
           }),
         }
       );
@@ -311,6 +317,14 @@ export const useChatStore = create((set, get) => ({
             confidence: data.confidence ?? null,
             streaming: false,
           });
+        } else if (event === 'thought' || event === 'tool_call' || event === 'observation') {
+          set((state) => ({
+            messages: state.messages.map((m) =>
+              m.id === assistantId
+                ? { ...m, agentEvents: [...(m.agentEvents || []), data] }
+                : m
+            ),
+          }));
         } else if (event === 'error') {
           throw new Error(data.error || 'Stream error');
         }

@@ -25,6 +25,7 @@ router.post(
     .isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
   body('collection_id').optional({ nullable: true }).isUUID().withMessage('collection_id must be a valid UUID'),
   body('conversation_id').optional({ nullable: true }).isUUID().withMessage('conversation_id must be a valid UUID'),
+  body('agentic').optional().isBoolean(),
   (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -35,7 +36,18 @@ router.post(
 );
 
 // POST /api/chat/stream - Server-Sent Events streaming endpoint
-router.post('/stream', requireAuth, sendMessageStream);
+router.post(
+  '/stream',
+  requireAuth,
+  body('agentic').optional().isBoolean(),
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    return sendMessageStream(req, res);
+  }
+);
 
 // GET /api/chat/history - Paginated history (cursor-based)
 // Supports ?cursor=created_at|id&limit=20&conversation_id=uuid

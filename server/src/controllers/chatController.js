@@ -8,6 +8,7 @@ const supabase = require('../config/supabaseClient');
 const { trackUsage } = require('../services/usageTracker');
 const queryRewriteService = require('../services/queryRewriteService');
 const ragConfig = require('../config/rag');
+const agentService = require('../services/agentService');
 
 async function sendMessage(req, res) {
   try {
@@ -35,12 +36,38 @@ async function sendMessage(req, res) {
       conversationService.autoTitleIfNew(conversationId, message);
     }
 
-    const ragResult = await ragService.generateAnswer(
-      message,
-      userId,
-      recentMessages,
-      collection_id || null
-    );
+    let ragResult;
+    if (req.body.agentic) {
+      // Non-streaming agentic path: run the agent loop directly, persist the run.
+      const agentResult = await agentService.runAgent({
+        question: message,
+        collectionId: collection_id || null,
+      });
+      await agentService.persistAgentRun({
+        userId,
+        conversationId,
+        question: message,
+        steps: agentResult.steps || [],
+        finalAnswer: agentResult.finalAnswer,
+        status: agentResult.status,
+        tokenUsage: agentResult.tokenUsage || {},
+      });
+      ragResult = {
+        answer: agentResult.usedFallback
+          ? ragService.FALLBACK_ANSWER
+          : agentResult.finalAnswer,
+        sources: agentResult.sources,
+        usedFallback: agentResult.usedFallback,
+        confidence: agentResult.confidence,
+      };
+    } else {
+      ragResult = await ragService.generateAnswer(
+        message,
+        userId,
+        recentMessages,
+        collection_id || null
+      );
+    }
 
     const assistantMsg = await chatService.saveMessage(
       userId,
@@ -117,11 +144,13 @@ async function sendMessageStream(req, res) {
     const recentMessages = await chatService.getRecentMessages(userId, 10);
     await chatService.saveMessage(userId, 'user', message, [], req.user);
 
+    const isAgentic = !!req.body.agentic && ragConfig.agentic?.enabled;
     const ragResult = await ragService.generateAnswerStream(
       message,
       userId,
       recentMessages,
-      collection_id || null
+      collection_id || null,
+      { agentic: isAgentic }
     );
 
     if (ragResult.usedFallback) {
@@ -144,19 +173,52 @@ async function sendMessageStream(req, res) {
     });
 
     let fullText = '';
-    for await (const token of ragResult.stream.tokenGenerator()) {
-      fullText += token;
-      send('token', { text: token });
+    for await (const evt of ragResult.stream.tokenGenerator()) {
+      // Agentic events are objects ({type, ...}); regular stream events are plain token strings.
+      if (evt && typeof evt === 'object') {
+        if (evt.type === 'token') {
+          fullText += evt.text;
+          send('token', { text: evt.text });
+        } else {
+          send(evt.type, evt);
+        }
+      } else {
+        fullText += evt;
+        send('token', { text: evt });
+      }
+    }
+
+    const finalResult = await ragResult.stream.finalize();
+    const finalSources = (finalResult && finalResult.sources && finalResult.sources.length > 0)
+      ? finalResult.sources
+      : ragResult.sources;
+    const finalConfidence = (finalResult && typeof finalResult.confidence === 'number')
+      ? finalResult.confidence
+      : ragResult.confidence;
+    const finalAnswer = (finalResult && finalResult.answer) || fullText;
+    const finalUsedFallback = finalResult ? !!finalResult.usedFallback : false;
+
+    if (isAgentic) {
+      // Persist a minimal agent run for the streaming path (no token_usage here).
+      agentService.persistAgentRun({
+        userId,
+        conversationId,
+        question: message,
+        steps: [],
+        finalAnswer,
+        status: finalUsedFallback ? 'failed' : 'completed',
+        tokenUsage: {},
+      });
     }
 
     send('done', {
-      answer: fullText,
-      sources: ragResult.sources,
-      confidence: ragResult.confidence,
-      usedFallback: false,
+      answer: finalAnswer,
+      sources: finalSources,
+      confidence: finalConfidence,
+      usedFallback: finalUsedFallback,
     });
 
-    await chatService.saveMessage(userId, 'assistant', fullText, ragResult.sources, req.user);
+    await chatService.saveMessage(userId, 'assistant', finalAnswer, finalSources, req.user);
     res.end();
   } catch (error) {
     console.error('[Chat] Stream error:', error);

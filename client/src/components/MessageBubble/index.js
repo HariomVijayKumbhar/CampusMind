@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import SourcesPanel from '@/components/SourcesPanel';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
+import AgentSteps from '@/components/AgentSteps';
 import { useChatStore } from '@/store/chatStore';
+import { useStudyStore } from '@/store/studyStore';
 import { useSpeechOutput } from '@/hooks/useSpeech';
 
 export default function MessageBubble({ message, index = 0 }) {
@@ -10,7 +12,10 @@ export default function MessageBubble({ message, index = 0 }) {
   const sources = message.sources || [];
 
   const [copied, setCopied] = useState(false);
+  const [savedFlashcard, setSavedFlashcard] = useState(false);
   const rateMessage = useChatStore((state) => state.rateMessage);
+  const messages = useChatStore((state) => state.messages);
+  const saveFlashcard = useStudyStore((state) => state.saveFlashcard);
   const { ttsSupported, speaking, speak, stopSpeaking } = useSpeechOutput();
   const feedback = message.myRating || null;
 
@@ -18,6 +23,18 @@ export default function MessageBubble({ message, index = 0 }) {
     navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveFlashcard = async () => {
+    // Pair this assistant answer with the immediately preceding user message.
+    const idx = messages.findIndex((m) => m.id === message.id);
+    const prior = idx > 0 ? messages[idx - 1] : null;
+    const question = prior && prior.role === 'user' ? prior.content : 'Q';
+    const ok = await saveFlashcard({ question, answer: content });
+    if (ok) {
+      setSavedFlashcard(true);
+      setTimeout(() => setSavedFlashcard(false), 2500);
+    }
   };
 
   return (
@@ -42,6 +59,10 @@ export default function MessageBubble({ message, index = 0 }) {
           <div className="mt-2 flex items-center">
             <ConfidenceBadge confidence={message.confidence} />
           </div>
+        )}
+
+        {!isUser && Array.isArray(message.agentEvents) && message.agentEvents.length > 0 && (
+          <AgentSteps events={message.agentEvents} />
         )}
 
         {!isUser && sources.length > 0 && (
@@ -103,6 +124,19 @@ export default function MessageBubble({ message, index = 0 }) {
               <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z"/>
               </svg>
+            </button>
+
+            <button
+              onClick={handleSaveFlashcard}
+              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors ${
+                savedFlashcard ? 'bg-violet-500/20 text-violet-300' : 'hover:bg-white/10 hover:text-white'
+              }`}
+              title="Save as flashcard"
+            >
+              <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/>
+              </svg>
+              <span className="text-[11px]">{savedFlashcard ? 'Saved' : 'Save'}</span>
             </button>
 
             <button

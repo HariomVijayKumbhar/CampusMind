@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Head from 'next/head';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import DocumentUploader from '@/components/DocumentUploader';
+import ShareDialog from '@/components/ShareDialog';
 import { useDocumentStore } from '@/store/documentStore';
 
 function StatusBadge({ status, ocrUsed }) {
@@ -57,6 +58,7 @@ export default function Documents() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCollection, setSelectedCollection] = useState('all');
   const [newCollectionName, setNewCollectionName] = useState('');
+  const [shareTarget, setShareTarget] = useState(null);
 
   useEffect(() => {
     fetchDocuments();
@@ -313,15 +315,43 @@ export default function Documents() {
                                 <p className="truncate text-sm font-semibold text-white">
                                   {doc.title}
                                 </p>
-                                <p className="mt-0.5 text-xs text-slate-400">
-                                  {doc.chunk_count} chunk{doc.chunk_count === 1 ? '' : 's'} · Added {new Date(doc.created_at).toLocaleDateString()}
-                                </p>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
+                                  <span>{doc.chunk_count} chunk{doc.chunk_count === 1 ? '' : 's'}</span>
+                                  <span>·</span>
+                                  <span>Added {new Date(doc.created_at).toLocaleDateString()}</span>
+                                  {doc.page_count != null && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                        📄 {doc.page_count} page{doc.page_count === 1 ? '' : 's'}
+                      </span>
+                                    </>
+                                  )}
+                                  {doc.table_count > 0 && (
+                                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                      📊 {doc.table_count} table{doc.table_count === 1 ? '' : 's'}
+                    </span>
+                                  )}
+                                  {doc.has_ocr && (
+                                    <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                      🔍 OCR
+                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-3">
                             <StatusBadge status={doc.status || 'ready'} />
+                            <button
+                              type="button"
+                              onClick={() => setShareTarget(doc)}
+                              disabled={uploading}
+                              className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-violet-500/40 hover:text-white disabled:opacity-40"
+                            >
+                              Share
+                            </button>
                             <button
                               type="button"
                               onClick={() => deleteDocument(doc.id)}
@@ -345,6 +375,14 @@ export default function Documents() {
           </div>
         </div>
       </div>
+
+      {shareTarget && (
+        <ShareDialog
+          documentId={shareTarget.id}
+          documentTitle={shareTarget.title}
+          onClose={() => setShareTarget(null)}
+        />
+      )}
     </ProtectedRoute>
   );
 }

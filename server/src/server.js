@@ -14,6 +14,7 @@ const studyRoutes = require('./routes/studyRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const examRoutes = require('./routes/examRoutes');
+const shareRoutes = require('./routes/shareRoutes');
 
 // Start the BullMQ worker for async document processing
 require('./services/documentQueue');
@@ -94,6 +95,7 @@ app.use('/api/study', studyRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/exams', examRoutes);
+app.use('/api/shares', shareRoutes);
 
 // Multer-specific errors -> 400
 app.use((err, req, res, next) => {

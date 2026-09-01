@@ -8,6 +8,7 @@ const retrievalService = require('./retrievalService');
 const rerankService = require('./rerankService');
 const cacheService = require('./cacheService');
 const queryRewriteService = require('./queryRewriteService');
+const agentService = require('./agentService');
 
 let groqInstance = null;
 if (ragConfig.groqApiKey) {
@@ -174,6 +175,11 @@ async function generateAnswerStream(question, userId, conversationHistory = [], 
     `[RAG] Processing question for user ${userId}: ${question.substring(0, 50)}...`
   );
 
+  // Agentic (Phase 1) — multi-step tool-calling loop with intermediate SSE events.
+  if (options.agentic && ragConfig.agentic && ragConfig.agentic.enabled) {
+    return runAgenticStream(question, conversationHistory, collectionId);
+  }
+
   // Query rewriting + language detection (spec Sections 8 & 13): retrieval runs
   // against the English-normalized rewritten question; the raw question is kept
   // for prompt/display/storage.
@@ -266,3 +272,131 @@ module.exports = {
   buildSource,
   FALLBACK_ANSWER,
 };
+
+/**
+ * Phase 1: Agentic RAG stream.
+ * Runs agentService.runAgent to plan/iterate tool calls, then streams the final
+ * answer tokens through the same `stream.tokenGenerator()` interface used by
+ * the single-pass pipeline. Intermediate events (thought/tool_call/observation)
+ * are queued and yielded to the controller which forwards them as SSE events.
+ */
+function runAgenticStream(question, conversationHistory, collectionId) {
+  const eventQueue = [];
+  let resolveNext = null;
+  let streamDone = false;
+  let streamResult = null;
+
+  const push = (event) => {
+    if (resolveNext) {
+      const r = resolveNext;
+      resolveNext = null;
+      r({ event, done: false });
+    } else {
+      eventQueue.push({ event, done: false });
+    }
+  };
+
+  const agentPromise = agentService
+    .runAgent({
+      question,
+      collectionId,
+      onEvent: (event) => {
+        if (event.type === 'final_answer') return;
+        push(event);
+      },
+    })
+    .then(async (agentResult) => {
+      if (agentResult.usedFallback || !agentResult.finalAnswer) {
+        streamResult = {
+          answer: FALLBACK_ANSWER,
+          sources: [],
+          usedFallback: true,
+          confidence: 0,
+          language: 'en',
+        };
+        push({ type: 'final' });
+        streamDone = true;
+        if (resolveNext) {
+          const r = resolveNext;
+          resolveNext = null;
+          r({ event: null, done: true });
+        }
+        return;
+      }
+
+      // Stream the final answer tokens via a synthetic Groq call using the
+      // agent's accumulated evidence (or just re-issue the answer if non-streaming).
+      const finalPrompt = `You are CampusMind. Based on the following research notes, write a final answer for the user's question. Be concise and accurate. Cite document titles when relevant.\n\nQuestion: ${question}\n\nNotes:\n${(agentResult.steps || []).map((s) => `- [${s.tool}] ${s.output_preview}`).join('\n')}\n\nAnswer:`;
+      const { tokenGenerator } = createAnswerStream(
+        'You are CampusMind, a helpful college assistant. Write the final answer using only the research notes provided. If the notes are insufficient, say you could not find the information.',
+        finalPrompt
+      );
+
+      let fullText = '';
+      for await (const token of tokenGenerator()) {
+        fullText += token;
+        push({ type: 'token', text: token });
+      }
+
+      streamResult = {
+        answer: fullText || agentResult.finalAnswer,
+        sources: agentResult.sources,
+        usedFallback: false,
+        confidence: agentResult.confidence,
+        language: 'en',
+      };
+      push({ type: 'final' });
+      streamDone = true;
+      if (resolveNext) {
+        const r = resolveNext;
+        resolveNext = null;
+        r({ event: null, done: true });
+      }
+    })
+    .catch((err) => {
+      console.error('[RAG] Agentic pipeline error:', err);
+      streamResult = {
+        answer: FALLBACK_ANSWER,
+        sources: [],
+        usedFallback: true,
+        confidence: 0,
+        language: 'en',
+      };
+      push({ type: 'error', message: err.message });
+      streamDone = true;
+      if (resolveNext) {
+        const r = resolveNext;
+        resolveNext = null;
+        r({ event: null, done: true });
+      }
+    });
+
+  async function* tokenGenerator() {
+    while (true) {
+      if (eventQueue.length > 0) {
+        const { event } = eventQueue.shift();
+        yield event;
+        continue;
+      }
+      if (streamDone) return;
+      const next = await new Promise((resolve) => {
+        resolveNext = resolve;
+      });
+      if (next.done) return;
+      yield next.event;
+    }
+  }
+
+  const finalize = async () => {
+    await agentPromise;
+    return streamResult;
+  };
+
+  return {
+    stream: { tokenGenerator, finalize },
+    sources: [],
+    confidence: 0,
+    usedFallback: false,
+    language: 'en',
+  };
+}

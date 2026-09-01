@@ -54,4 +54,40 @@ module.exports = {
     langCode && langCode !== 'en'
       ? `Respond in the language with ISO 639-1 code "${langCode}". Write the entire answer in that language, but keep proper nouns, course names, and document titles as they appear in the context.`
       : 'Respond in English.',
+
+  // Agentic (Phase 1) — multi-step research loop with Groq function calling.
+  agentic: {
+    maxSteps: 7,
+    toolTopK: 8,
+    rerankThreshold: 4.0,
+    enabled: true,
+  },
+
+  // Document Intelligence (Phase 2)
+  di: {
+    maxTableRows: 20,
+    maxKeyPointsPerChunk: 3,
+    chunkSize: 1500,
+    chunkOverlap: 200,
+    minChunkSize: 200,
+    enableTableExtraction: true,
+    enableMetadataExtraction: true,
+    enableKeyPoints: true,
+  },
+
+  // Personalized Learning Engine (Phase 3)
+  learning: {
+    sm2: { defaultEaseFactor: 2.5, minEaseFactor: 1.3, defaultIntervalDays: 1 },
+    weakAreaThreshold: 3,
+    recommendationLimit: 5,
+    enabled: true,
+  },
+
+  // Collaborative Knowledge Management (Phase 4)
+  collab: {
+    defaultShareRole: 'viewer',
+    defaultShareExpiryDays: 30,
+    maxShareUses: -1,
+    enabled: true,
+  },
 };

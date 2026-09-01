@@ -185,6 +185,32 @@ export const useDocumentStore = create((set, get) => ({
     }
   },
 
+  // --- Phase 4: annotations, versions, intelligence ---
+  fetchAnnotations: async (documentId) => {
+    const res = await api.get(`/api/documents/${documentId}/annotations`);
+    return res.data?.annotations || [];
+  },
+  createAnnotation: async (documentId, payload) => {
+    const res = await api.post(`/api/documents/${documentId}/annotations`, payload);
+    return res.data?.annotation || null;
+  },
+  resolveAnnotation: async (documentId, annotationId) => {
+    const res = await api.patch(`/api/documents/${documentId}/annotations/${annotationId}/resolve`);
+    return res.data?.annotation || null;
+  },
+  deleteAnnotation: async (documentId, annotationId) => {
+    await api.delete(`/api/documents/${documentId}/annotations/${annotationId}`);
+    return true;
+  },
+  fetchVersions: async (documentId) => {
+    const res = await api.get(`/api/documents/${documentId}/versions`);
+    return res.data?.versions || [];
+  },
+  fetchIntelligence: async (documentId) => {
+    const res = await api.get(`/api/documents/${documentId}/intelligence`);
+    return res.data || { tables: [], metadata: null, key_points: [] };
+  },
+
   clearError: () => set({ error: '' }),
   clearSuccess: () => set({ success: '' }),
 }));
