@@ -34,4 +34,24 @@ module.exports = {
   groqApiKey: env.groq.apiKey,
   llmTemperature: 0.7,
   llmMaxTokens: 1024,
+
+    // Answer length modes (Section 16): prompt-only instruction changes.
+  lengthModes: {
+    concise: {
+      label: 'Concise',
+      instruction: 'Answer in 2-3 short sentences. Be direct and to the point.',
+    },
+    detailed: {
+      label: 'Detailed',
+      instruction:
+        'Answer thoroughly, including relevant caveats, steps, and any important exceptions found in the context. Use short paragraphs or bullet points where helpful.',
+    },
+  },
+  defaultLengthMode: 'concise',
+
+  // Multilingual answering (Section 13): instruction template for the target language.
+  languageInstruction: (langCode) =>
+    langCode && langCode !== 'en'
+      ? `Respond in the language with ISO 639-1 code "${langCode}". Write the entire answer in that language, but keep proper nouns, course names, and document titles as they appear in the context.`
+      : 'Respond in English.',
 };

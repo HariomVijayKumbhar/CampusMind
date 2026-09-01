@@ -11,43 +11,40 @@ const {
   deleteConversation,
   getSessionHistory,
 } = require('../controllers/chatController');
-const conversationService = require('../services/conversationService');
 
 const router = express.Router();
 
+// POST /api/chat - Send a message (non-streaming)
 router.post(
   '/',
   requireAuth,
-  body('message').isString().trim().notEmpty().withMessage('Message is required'),
+  body('message')
+    .isString()
+    .trim()
+    .notEmpty().withMessage('Message is required')
+    .isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
   body('collection_id').optional({ nullable: true }).isUUID().withMessage('collection_id must be a valid UUID'),
-  async (req, res) => {
+  body('conversation_id').optional({ nullable: true }).isUUID().withMessage('conversation_id must be a valid UUID'),
+  (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-
-    await sendMessage(req, res);
+    sendMessage(req, res);
   }
 );
 
-router.get('/history', requireAuth, getHistory);
-
-module.exports = router;
-
+// POST /api/chat/stream - Server-Sent Events streaming endpoint
 router.post('/stream', requireAuth, sendMessageStream);
 
-// --- Conversation routes ----------------------------------------------------
-router.get('/conversations', requireAuth, listConversations);
-
-router.post('/conversations', requireAuth, createConversation);
-
-router.patch('/conversations/:id', requireAuth, (req, res) =>
-  renameConversation(req, res)
-);
-
-router.delete('/conversations/:id', requireAuth, (req, res) =>
-  deleteConversation(req, res)
-);
-
-// Session-scoped history (falls back to all messages when no id given)
+// GET /api/chat/history - Paginated history (cursor-based)
+// Supports ?cursor=created_at|id&limit=20&conversation_id=uuid
 router.get('/history', requireAuth, (req, res) => getSessionHistory(req, res));
+
+// --- Conversation management (session sidebar) ---
+router.get('/conversations', requireAuth, listConversations);
+router.post('/conversations', requireAuth, createConversation);
+router.patch('/conversations/:id', requireAuth, renameConversation);
+router.delete('/conversations/:id', requireAuth, deleteConversation);
+
+module.exports = router;

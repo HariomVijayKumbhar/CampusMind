@@ -2,15 +2,17 @@
 const express = require('express');
 const requireAuth = require('../middleware/requireAuth');
 const authService = require('../services/authService');
+const { signupValidation } = require('../middleware/signupValidation');
+const { validationResult } = require('express-validator');
 
 const router = express.Router();
 
 // GET /api/auth/profile - Get current user's profile
 router.get('/profile', requireAuth, async (req, res) => {
   try {
-    const profile = await authService.getProfile(req.user || req.userId);
+    const profile = await authService.getProfile(req.user);
 
-    // Merge the email from the verified auth user
+    // Merge the email from the verified auth user (profiles table has no email column)
     res.json({
       ...profile,
       email: req.user?.email || null,
@@ -22,12 +24,14 @@ router.get('/profile', requireAuth, async (req, res) => {
 });
 
 // POST /api/auth/signup - Create a new user (admin-confirmed via service role)
-router.post('/signup', async (req, res) => {
+router.post('/signup', signupValidation, async (req, res) => {
   try {
-    const { email, password, fullName } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
+
+    const { email, password, fullName } = req.body;
 
     const result = await authService.signup(email, password, fullName);
     res.json({ user: result.user, session: result.session });

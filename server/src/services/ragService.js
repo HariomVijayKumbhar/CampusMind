@@ -7,6 +7,7 @@ const ragConfig = require('../config/rag');
 const retrievalService = require('./retrievalService');
 const rerankService = require('./rerankService');
 const cacheService = require('./cacheService');
+const queryRewriteService = require('./queryRewriteService');
 
 let groqInstance = null;
 if (ragConfig.groqApiKey) {
@@ -78,7 +79,11 @@ function buildSources(chunks) {
  * Conversation history is included verbatim in the prompt for conversational
  * coherence (no separate query-rewriting step).
  */
-function assemblePrompt(question, chunks, conversationHistory = []) {
+function assemblePrompt(question, chunks, conversationHistory = [], options = {}) {
+  const { lengthMode = ragConfig.defaultLengthMode, language = 'en' } = options;
+  const lengthModeConfig =
+    ragConfig.lengthModes[lengthMode] || ragConfig.lengthModes[ragConfig.defaultLengthMode];
+
   const contextText = chunks
     .map((chunk, i) => `[Chunk ${i + 1} - ${chunk.document_title || 'Document'}]\n${chunk.content}`)
     .join('\n\n');
@@ -88,7 +93,10 @@ function assemblePrompt(question, chunks, conversationHistory = []) {
 Guidelines:
 - If the answer is found in the context, provide a clear, concise, and structured answer.
 - If the answer is NOT in the provided documents or context, say "I don't have that information in the college knowledge base."
-- Do not invent facts, dates, or details.`;
+- Do not invent facts, dates, or details.
+
+Answer style (${lengthModeConfig.label}): ${lengthModeConfig.instruction}
+Language: ${ragConfig.languageInstruction(language)}`;
 
   const historyText = conversationHistory
     .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
@@ -157,7 +165,7 @@ function createAnswerStream(systemPrompt, userPrompt) {
  * - hit: { prompt, sources, confidence, stream } where stream.tokenGenerator()
  *   yields answer tokens and stream.finalize() resolves to the full text.
  */
-async function generateAnswerStream(question, userId, conversationHistory = [], collectionId = null) {
+async function generateAnswerStream(question, userId, conversationHistory = [], collectionId = null, options = {}) {
   if (!question || typeof question !== 'string') {
     throw new Error('Question must be a non-empty string');
   }
@@ -166,7 +174,23 @@ async function generateAnswerStream(question, userId, conversationHistory = [], 
     `[RAG] Processing question for user ${userId}: ${question.substring(0, 50)}...`
   );
 
-  const candidates = await retrievalService.hybridRetrieve(question, collectionId);
+  // Query rewriting + language detection (spec Sections 8 & 13): retrieval runs
+  // against the English-normalized rewritten question; the raw question is kept
+  // for prompt/display/storage.
+  let rewritten = question;
+  let language = 'en';
+  try {
+    const rw = await queryRewriteService.rewriteAndDetect(question, conversationHistory);
+    rewritten = rw.rewritten;
+    language = rw.language;
+    if (rewritten !== question) {
+      console.log(`[RAG] Rewritten question: ${rewritten.substring(0, 80)}...`);
+    }
+  } catch (err) {
+    console.warn('[RAG] Query rewrite skipped:', err.message);
+  }
+
+  const candidates = await retrievalService.hybridRetrieve(rewritten, collectionId);
 
   if (candidates.length === 0) {
     console.log('[RAG] Fallback: No candidates retrieved');
@@ -179,7 +203,7 @@ async function generateAnswerStream(question, userId, conversationHistory = [], 
   }
 
   // LLM re-ranking: one batched Groq call for all candidates
-  const reranked = await rerankService.rerankChunks(question, candidates);
+  const reranked = await rerankService.rerankChunks(rewritten, candidates);
   const bestScore = reranked.length > 0 ? reranked[0].relevanceScore : 0;
 
   // Explicit, testable fallback rule (config/rag.js)
@@ -197,7 +221,10 @@ async function generateAnswerStream(question, userId, conversationHistory = [], 
   const sources = buildSources(topChunks);
   const confidence = topChunks[0].relevanceScore / 10; // 0-1 from best re-rank score
 
-  const { systemPrompt, userPrompt } = assemblePrompt(question, topChunks, conversationHistory);
+  const { systemPrompt, userPrompt } = assemblePrompt(question, topChunks, conversationHistory, {
+    lengthMode: options.lengthMode,
+    language,
+  });
 
   const stream = createAnswerStream(systemPrompt, userPrompt);
 
@@ -206,6 +233,7 @@ async function generateAnswerStream(question, userId, conversationHistory = [], 
     sources,
     confidence,
     usedFallback: false,
+    language,
     stream,
   };
 }
@@ -213,11 +241,11 @@ async function generateAnswerStream(question, userId, conversationHistory = [], 
 /**
  * Non-streamed variant: used by the integration test suite.
  */
-async function generateAnswer(question, userId, conversationHistory = [], collectionId = null) {
-  const result = await generateAnswerStream(question, userId, conversationHistory, collectionId);
+async function generateAnswer(question, userId, conversationHistory = [], collectionId = null, options = {}) {
+  const result = await generateAnswerStream(question, userId, conversationHistory, collectionId, options);
 
   if (result.usedFallback) {
-    return { answer: result.answer, sources: [], usedFallback: true, confidence: 0 };
+    return { answer: result.answer, sources: [], usedFallback: true, confidence: 0, language: 'en' };
   }
 
   const answer = await result.stream.finalize();
@@ -226,6 +254,7 @@ async function generateAnswer(question, userId, conversationHistory = [], collec
     sources: result.sources,
     usedFallback: false,
     confidence: result.confidence,
+    language: result.language,
   };
 }
 

@@ -34,6 +34,9 @@ module.exports = {
     // returns 404 for it); override with GROQ_MODEL if desired.
     model: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
   },
+   redis: {
+    url: process.env.REDIS_URL || 'redis://localhost:6379',
+  },
   rateLimit: {
     api: {
       windowMs: 15 * 60 * 1000,

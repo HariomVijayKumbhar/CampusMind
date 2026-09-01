@@ -1,9 +1,42 @@
 import { useState } from 'react';
 
 /**
+ * Renders a source excerpt with the `highlighted_span` (text + start/end offsets
+ * into `excerpt`) visually highlighted. Falls back to plain text when no span is present.
+ */
+function HighlightedExcerpt({ source }) {
+  const { excerpt, highlighted_span } = source;
+  if (!excerpt) return null;
+
+  if (highlighted_span && typeof highlighted_span.start === 'number' && typeof highlighted_span.end === 'number') {
+    const { start, end } = highlighted_span;
+    if (start >= 0 && end <= excerpt.length && end > start) {
+      const before = excerpt.slice(0, start);
+      const match = excerpt.slice(start, end);
+      const after = excerpt.slice(end);
+      return (
+        <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-slate-400">
+          &ldquo;
+          {before && <span>{before}</span>}
+          <mark className="rounded bg-violet-500/25 px-0.5 text-violet-200">{match}</mark>
+          {after && <span>{after}</span>}
+          &rdquo;
+        </p>
+      );
+    }
+  }
+
+  return (
+    <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-slate-400 italic">
+      &ldquo;{excerpt}&rdquo;
+    </p>
+  );
+}
+
+/**
  * Expandable "Sources" panel shown under an assistant message.
- * Lists the document titles, relevance percentage, and short excerpts that grounded the answer.
- * Props: sources - array of { document_title, excerpt, similarity }
+ * Lists the document titles, relevance percentage, and highlighted excerpts that grounded the answer.
+ * Props: sources - array of { document_title, excerpt, highlighted_span, similarity, confidence }
  */
 export default function SourcesPanel({ sources }) {
   const [open, setOpen] = useState(false);
@@ -57,11 +90,7 @@ export default function SourcesPanel({ sources }) {
                     </span>
                   )}
                 </div>
-                {source.excerpt && (
-                  <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-slate-400 italic">
-                    &ldquo;{source.excerpt}&rdquo;
-                  </p>
-                )}
+                <HighlightedExcerpt source={source} />
               </div>
             );
           })}

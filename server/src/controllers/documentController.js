@@ -1,5 +1,12 @@
 // Document Controller - request parsing and response shaping
+// Async upload: validates file, creates DB record with status 'processing',
+// saves temp file, enqueues background job, returns 202 Accepted immediately.
+
 const documentService = require('../services/documentService');
+const documentQueue = require('../services/documentQueue');
+const fs = require('fs/promises');
+const os = require('os');
+const path = require('path');
 
 async function uploadDocument(req, res) {
   try {
@@ -11,12 +18,24 @@ async function uploadDocument(req, res) {
       return res.status(400).json({ error: 'No file provided' });
     }
 
+    // 1. Create document record with status 'processing'
     const document = await documentService.uploadDocument(file, userId, collectionId);
 
-    res.status(201).json({
+    // 2. Save file to temp disk for the background worker
+    const tempPath = path.join(os.tmpdir(), `document-${document.id}.pdf`);
+    await fs.writeFile(tempPath, file.buffer);
+
+    // 3. Enqueue background processing job
+    await documentQueue.enqueueDocument(document.id, tempPath, {
+      originalName: file.originalname,
+      mimetype: file.mimetype,
+    });
+
+    // 4. Return 202 — processing happens asynchronously
+    res.status(202).json({
       success: true,
       document,
-      message: 'Document uploaded and processed successfully.',
+      message: 'Document uploaded. Processing in background.',
     });
   } catch (error) {
     console.error('Upload controller error:', error);

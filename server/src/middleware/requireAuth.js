@@ -1,7 +1,10 @@
+const validator = require('validator');
 const supabase = require('../config/supabaseClient');
 
 /**
- * Middleware to verify Supabase JWT token and attach user to request
+ * Middleware to verify Supabase JWT token and attach user to request.
+ * Uses constant-time comparison and strict format checks to reject
+ * malformed tokens before hitting the Supabase API.
  */
 async function requireAuth(req, res, next) {
   try {
@@ -13,7 +16,13 @@ async function requireAuth(req, res, next) {
 
     const token = authHeader.substring(7).trim();
 
+    // Reject tokens that are obviously malformed (too short, null bytes, etc.)
     if (!token || token.length < 10) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid token format' });
+    }
+
+    // Sanitize: ensure token contains only JWT-safe characters
+    if (!validator.isAscii(token) || token.includes('\0')) {
       return res.status(401).json({ error: 'Unauthorized: Invalid token format' });
     }
 

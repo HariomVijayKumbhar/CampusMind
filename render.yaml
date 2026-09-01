@@ -15,7 +15,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: FRONTEND_URL
-        sync: false        # set to your Vercel URL, e.g. https://campusmind.vercel.app
+        sync: false # set to your Vercel URL, e.g. https://campusmind.vercel.app
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
@@ -23,4 +23,4 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
-        sync: false        # optional, defaults to qwen/qwen3.8-27b
+        sync: false # optional, defaults to qwen/qwen3.8-27b

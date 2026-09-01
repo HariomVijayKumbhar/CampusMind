@@ -6,6 +6,8 @@ const chatService = require('../services/chatService');
 const conversationService = require('../services/conversationService');
 const supabase = require('../config/supabaseClient');
 const { trackUsage } = require('../services/usageTracker');
+const queryRewriteService = require('../services/queryRewriteService');
+const ragConfig = require('../config/rag');
 
 async function sendMessage(req, res) {
   try {

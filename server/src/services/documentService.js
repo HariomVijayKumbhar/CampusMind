@@ -1,6 +1,10 @@
-// Document Service - PDF and Image (PNG/JPG/JPEG/WEBP) upload, OCR extraction, chunking, embedding, storage
-// Operates fully in memory for ephemeral cloud deployments
+// Document Service - PDF/Image/DOCX/TXT upload, extraction, chunking, embedding, storage
+// Async pipeline: uploadDocument creates a record; processDocument does the heavy work
+// in a BullMQ background worker (queued via documentQueue.js).
 
+const fs = require('fs/promises');
+const os = require('os');
+const path = require('path');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const supabase = require('../config/supabaseClient');
@@ -19,7 +23,7 @@ async function extractPdfText(fileBuffer) {
     const data = await pdfParse(fileBuffer);
     return data.text || '';
   } catch (error) {
-    console.warn(`[PDF Parse] Standard extraction warning: ${error.message}`);
+    console.warn(`[DocumentService] PDF Parse warning: ${error.message}`);
     return '';
   }
 }
@@ -32,20 +36,25 @@ async function extractDocxText(fileBuffer) {
     const result = await mammoth.extractRawText({ buffer: fileBuffer });
     return result.value || '';
   } catch (error) {
-    console.warn('[DOCX Parse] Extraction warning: ' + error.message);
+    console.warn('[DocumentService] DOCX extraction warning:', error.message);
     return '';
   }
 }
 
 /**
- * Split text into semantic chunks using recursive character splitting
+ * Split text into semantic chunks using recursive character splitting.
+ * Preserves paragraph, sentence, and word boundaries.
  */
-function chunkText(text, chunkSize = ragConfig.chunkSize, overlap = ragConfig.chunkOverlap) {
-  return textSplitter.splitText(text, chunkSize, overlap);
+function chunkText(text, chunkSize, overlap) {
+  return textSplitter.splitText(
+    text,
+    chunkSize || ragConfig.chunkSize,
+    overlap || ragConfig.chunkOverlap
+  );
 }
 
 /**
- * Generate embeddings for all chunks and store them in the database
+ * Generate embeddings for all chunks and store them in the database.
  */
 async function generateAndStoreChunks(documentId, chunks) {
   const chunkRecords = [];
@@ -65,7 +74,6 @@ async function generateAndStoreChunks(documentId, chunks) {
     .insert(chunkRecords);
 
   if (chunkError) {
-    await supabase.from('documents').delete().eq('id', documentId);
     throw new Error(`Failed to store chunks: ${chunkError.message}`);
   }
 
@@ -73,7 +81,7 @@ async function generateAndStoreChunks(documentId, chunks) {
 }
 
 /**
- * Update document status in the database
+ * Update document status in the database.
  */
 async function updateDocumentStatus(documentId, status) {
   const { error } = await supabase
@@ -82,18 +90,15 @@ async function updateDocumentStatus(documentId, status) {
     .eq('id', documentId);
 
   if (error) {
-    console.warn(`Failed to update document ${documentId} status to ${status}:`, error.message);
+    console.warn(`[DocumentService] Failed to update document ${documentId} status to ${status}:`, error.message);
   }
 }
 
 /**
- * Upload and process a PDF or Image (PNG/JPG/JPEG/WEBP) synchronously in memory
+ * Extract text from an uploaded file based on its mime type.
+ * Delegates to PDF, DOCX, OCR, or plain-text handlers.
  */
-async function uploadDocument(file, userId, collectionId = null) {
-  if (!file || !file.buffer) {
-    throw new Error('Invalid file payload.');
-  }
-
+async function extractText(file, fileBuffer) {
   const isImage = file.mimetype.startsWith('image/');
   const isPdf = file.mimetype === 'application/pdf';
   const isDocx =
@@ -104,50 +109,60 @@ async function uploadDocument(file, userId, collectionId = null) {
     file.mimetype === 'text/plain' || file.originalname.toLowerCase().endsWith('.txt');
 
   if (!isImage && !isPdf && !isDocx && !isTxt) {
-    throw new Error('Supported file types: PDF, DOCX, TXT, PNG, JPG, JPEG, and WEBP.');
-  }
-
-  if (file.size > 30 * 1024 * 1024) {
-    throw new Error('File size exceeds 30MB limit.');
+    throw new Error(
+      'Supported file types: PDF, DOCX, TXT, PNG, JPG, JPEG, and WEBP.'
+    );
   }
 
   let extractedText = '';
 
   if (isImage) {
     console.log(`[DocumentService] Processing image upload with OCR: ${file.originalname}`);
-    extractedText = await ocrService.extractTextFromImage(file.buffer);
+    extractedText = await ocrService.extractTextFromImage(fileBuffer);
   } else if (isDocx) {
     console.log(`[DocumentService] Extracting text from DOCX: ${file.originalname}`);
-    extractedText = await extractDocxText(file.buffer);
+    extractedText = await extractDocxText(fileBuffer);
   } else if (isTxt) {
     console.log(`[DocumentService] Reading TXT: ${file.originalname}`);
-    extractedText = file.buffer.toString('utf-8');
+    extractedText = fileBuffer.toString('utf-8');
   } else if (isPdf) {
     console.log(`[DocumentService] Extracting text from PDF: ${file.originalname}`);
-    extractedText = await extractPdfText(file.buffer);
+    extractedText = await extractPdfText(fileBuffer);
 
-    // If PDF text is empty or very small (e.g. scanned image PDF), run OCR fallback
+    // If PDF text is empty or very small (scanned image PDF), run OCR fallback
     if (!extractedText || extractedText.trim().length < 20) {
-      console.log(`[DocumentService] PDF appears to be a scanned image. Running OCR extraction...`);
+      console.log('[DocumentService] PDF appears to be a scanned image. Running OCR extraction...');
       try {
-        extractedText = await ocrService.extractTextFromImage(file.buffer);
+        extractedText = await ocrService.extractTextFromImage(fileBuffer);
       } catch (ocrErr) {
-        console.warn(`[DocumentService] PDF OCR fallback warning: ${ocrErr.message}`);
+        console.warn('[DocumentService] PDF OCR fallback warning:', ocrErr.message);
       }
     }
   }
 
-  if (!extractedText || extractedText.trim().length === 0) {
-    throw new Error(
-      'Could not extract readable text from the uploaded document or image. Please ensure the image is clear.'
-    );
+  return extractedText;
+}
+
+/**
+ * Validate an uploaded file payload.
+ */
+function validateFile(file) {
+  if (!file || !file.buffer) {
+    throw new Error('Invalid file payload.');
   }
 
-  const chunks = chunkText(extractedText);
-
-  if (chunks.length === 0) {
-    throw new Error('Failed to create text chunks from the extracted content.');
+  if (file.size > 30 * 1024 * 1024) {
+    throw new Error('File size exceeds 30MB limit.');
   }
+}
+
+/**
+ * Create the initial document record in Supabase with status 'processing'.
+ * Returns the created document object. The actual extraction/chunking/embedding
+ * happens asynchronously in a background worker (processDocument).
+ */
+async function uploadDocument(file, userId, collectionId = null) {
+  validateFile(file);
 
   const { data: documentData, error: docError } = await supabase
     .from('documents')
@@ -155,7 +170,7 @@ async function uploadDocument(file, userId, collectionId = null) {
       title: file.originalname,
       uploaded_by: userId,
       collection_id: collectionId,
-      status: 'ready',
+      status: 'processing',
     })
     .select()
     .single();
@@ -164,25 +179,63 @@ async function uploadDocument(file, userId, collectionId = null) {
     throw new Error(`Failed to create document record: ${docError?.message}`);
   }
 
+  console.log(`[DocumentService] Created document record: ${documentData.id} (status: processing)`);
+
+  return {
+    id: documentData.id,
+    title: documentData.title,
+    uploaded_by: documentData.uploaded_by,
+    collection_id: documentData.collection_id,
+    created_at: documentData.created_at,
+    status: 'processing',
+    chunk_count: 0,
+  };
+}
+
+/**
+ * Background processing function — extracts text, chunks, generates embeddings,
+ * and stores chunks for a previously created document record.
+ * Called by the BullMQ worker in documentQueue.js.
+ */
+async function processDocument(documentId, file, fileBuffer) {
+  const tempDir = os.tmpdir();
+  const tempPath = path.join(tempDir, `document-${documentId}.pdf`);
+
   try {
-    const chunkCount = await generateAndStoreChunks(documentData.id, chunks);
+    await updateDocumentStatus(documentId, 'processing');
+
+    validateFile(file);
+
+    let extractedText = await extractText(file, fileBuffer);
+
+    if (!extractedText || extractedText.trim().length === 0) {
+      throw new Error(
+        'Could not extract readable text from the uploaded document or image.'
+      );
+    }
+
+    const chunks = chunkText(extractedText);
+
+    if (chunks.length === 0) {
+      throw new Error('Failed to create text chunks from extracted content.');
+    }
+
+    const chunkCount = await generateAndStoreChunks(documentId, chunks);
+
+    await updateDocumentStatus(documentId, 'ready');
 
     console.log(
-      `✓ Successfully indexed ${file.originalname}: ${chunkCount} chunks, ${extractedText.length} characters.`
+      `✓ [DocumentService] Successfully indexed document ${documentId}: ` +
+      `${chunkCount} chunks, ${extractedText.length} characters.`
     );
 
-    return {
-      id: documentData.id,
-      title: documentData.title,
-      uploaded_by: documentData.uploaded_by,
-      collection_id: documentData.collection_id,
-      created_at: documentData.created_at,
-      status: 'ready',
-      chunk_count: chunkCount,
-    };
+    return { documentId, chunkCount };
   } catch (error) {
-    await supabase.from('documents').delete().eq('id', documentData.id);
+    console.error(`[DocumentService] Processing failed for document ${documentId}:`, error);
+    await updateDocumentStatus(documentId, 'failed');
     throw error;
+  } finally {
+    await fs.unlink(tempPath).catch(() => {});
   }
 }
 
@@ -270,7 +323,7 @@ async function listDocuments(collectionId = null) {
 async function getDocument(documentId) {
   const { data: document, error } = await supabase
     .from('documents')
-    .select('id, title, uploaded_by, status, created_at')
+    .select('id, title, uploaded_by, collection_id, status, created_at')
     .eq('id', documentId)
     .single();
 
@@ -293,8 +346,13 @@ async function getDocument(documentId) {
 
 module.exports = {
   uploadDocument,
+  processDocument,
   deleteDocument,
   listDocuments,
   getDocument,
   updateDocumentStatus,
+  extractPdfText,
+  extractDocxText,
+  chunkText,
+  validateFile,
 };
