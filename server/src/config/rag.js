@@ -4,9 +4,9 @@
 const env = require('./env');
 
 module.exports = {
-  // Chunking parameters
-  chunkSize: 500, // tokens per chunk
-  chunkOverlap: 50, // tokens overlap between chunks
+  // Chunking parameters (character-based — RecursiveCharacterTextSplitter, not token counting)
+  chunkSize: 1500,   // max characters per chunk
+  chunkOverlap: 200, // characters of overlap between chunks
 
   // Retrieval parameters
   semanticTopK: 15, // candidates from pgvector cosine search
@@ -35,7 +35,7 @@ module.exports = {
   llmTemperature: 0.7,
   llmMaxTokens: 1024,
 
-    // Answer length modes (Section 16): prompt-only instruction changes.
+  // Answer length modes: prompt-only instruction changes.
   lengthModes: {
     concise: {
       label: 'Concise',
@@ -49,7 +49,7 @@ module.exports = {
   },
   defaultLengthMode: 'concise',
 
-  // Multilingual answering (Section 13): instruction template for the target language.
+  // Multilingual answering: instruction template for the target language.
   languageInstruction: (langCode) =>
     langCode && langCode !== 'en'
       ? `Respond in the language with ISO 639-1 code "${langCode}". Write the entire answer in that language, but keep proper nouns, course names, and document titles as they appear in the context.`
