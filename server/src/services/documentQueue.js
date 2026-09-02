@@ -9,17 +9,17 @@
 // Production: REDIS_URL points to your Redis instance (e.g. Redis Cloud, AWS ElastiCache).
 // Local dev: docker-compose starts a Redis container automatically.
 
-const { Queue, Worker, QueueScheduler } = require('bullmq');
+const { Queue, Worker } = require('bullmq');
 const IORedis = require('ioredis');
 const documentService = require('./documentService');
 const env = require('../config/env');
 
-const connection = new IORedis(env.redis.url);
+const connection = new IORedis({
+  ...(env.redis.url ? { url: env.redis.url } : { host: 'localhost', port: 6379 }),
+  maxRetriesPerRequest: null,
+});
 
 const documentQueue = new Queue('document-processing', { connection });
-
-// Ensure delayed/retrying jobs don't get stuck
-new QueueScheduler('document-processing', { connection });
 
 const worker = new Worker(
   'document-processing',
