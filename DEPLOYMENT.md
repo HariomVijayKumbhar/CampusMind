@@ -36,16 +36,16 @@ Architecture: **Next.js frontend → Vercel**, **Express API → Render**, **Sup
 
 ## 4. Environment variables summary
 
-| Variable | Where | Value |
-|---|---|---|
-| `FRONTEND_URL` | Render | Vercel domain(s), comma-separated |
-| `SUPABASE_URL` | Render | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Render | Supabase service-role key (SECRET) |
-| `GROQ_API_KEY` | Render | Groq API key |
-| `GROQ_MODEL` | Render (optional) | defaults to `qwen/qwen3.8-27b` |
-| `NEXT_PUBLIC_API_URL` | Vercel | Render backend URL |
-| `NEXT_PUBLIC_SUPABASE_URL` | Vercel | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel | Supabase anon key |
+| Variable                        | Where             | Value                              |
+| ------------------------------- | ----------------- | ---------------------------------- |
+| `FRONTEND_URL`                  | Render            | Vercel domain(s), comma-separated  |
+| `SUPABASE_URL`                  | Render            | Supabase project URL               |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Render            | Supabase service-role key (SECRET) |
+| `GROQ_API_KEY`                  | Render            | Groq API key                       |
+| `GROQ_MODEL`                    | Render (optional) | defaults to `qwen/qwen3.8-27b`     |
+| `NEXT_PUBLIC_API_URL`           | Vercel            | Render backend URL                 |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Vercel            | Supabase project URL               |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel            | Supabase anon key                  |
 
 Local templates: `server/.env.local.example`, `client/.env.local.example`.
 
